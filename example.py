@@ -8,7 +8,7 @@ Created on Mon May 11 10:12:23 2020
 
 import numpy.ma as ma
 
-from lib import SRTM_dem_make, dem_show, water_pixel_masker
+from dem_tools_lib import SRTM_dem_make, dem_show, water_pixel_masker
 
 
 #%% Make and show an SRTM3 DEM
@@ -31,4 +31,3 @@ dem, lons, lats =  SRTM_dem_make(-3, -1, 53, 55, SRTM1_or3 = 'SRTM1', SRTM1_tile
 dem_mask = water_pixel_masker(dem, lons, lats, 'i', verbose = True)
 dem_ma = ma.array(dem, mask = dem_mask)
 dem_show(dem_ma,lons,lats,srtm = 1, units_deg = True)                                                                   # plot the DEM
-
