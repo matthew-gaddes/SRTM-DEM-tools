@@ -1,0 +1,16 @@
+name: SRTM-DEM-Tools
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.7.1
+  - matplotlib=3.0                  # Newer version can create issues with basemap
+  - numpy
+  - ipdb
+  - scikit-learn
+  - spyder
+  - basemap-data-hires
+  - pip
+  - pip:
+    - wget

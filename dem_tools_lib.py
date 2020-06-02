@@ -8,7 +8,7 @@ Created on Mon May 11 10:08:03 2020
 
 
 
-def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3',
+def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_resolution = None,
                   SRTM1_tiles_folder = './SRTM1/', SRTM3_tiles_folder = './SRTM3/',
                   ed_username = None, ed_password = None, download = True, void_fill = False):
     """
@@ -19,6 +19,8 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3',
         south | -90 -> 90  | northern hemishpere is positive
         north | -90 -> 90  | northern hemishpere is positive
         SRTM1_or3 | string | either use SRTM3 (~90m pixels) or SRTM1 (~30m pixels)
+        water_mask_resolution | None or string | If not none, the DEM will be returned as a masked array, with water masked.  
+                                        Resolution of vector coastlines: c l i h f   (ie coarse down to fine)
         SRTM1_tiles_folder | string | folder where SRTM1 .hgt file are kept
         SRTM3_tiles_folder | string | folder where SRTM3 .hgt file are kept
         
@@ -34,13 +36,20 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3',
     """
     #import matplotlib.pyplot as plt
     import numpy as np
+    import numpy.ma as ma
     #import os 
     from scipy.interpolate import griddata             # for interpolating over any voids
+
+    print(f"Making a dem between {west} and {east} longitude, and {south} and {north} latitude.  ")
+    if water_mask_resolution is None:
+        print(f"{SRTM1_or3} tiles will be used, and water bodies won't be masked.  ")
+    else:
+        print(f"{SRTM1_or3} tiles will be used, and water bodies will be masked.  ")
 
     # Things to set
     null = -32768                                                               # from SRTM documentation   
     
-    # 0: determine resolution
+    # 0: determine resolution and check inputs
     if SRTM1_or3 == 'SRTM3':
         samples = 1201
         SRTM3 = True
@@ -52,22 +61,35 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3',
     else:
         raise Exception(f"'SRTM1_or3' must be eitehr SRTM1 or SRTM3.  Exiting...")
     
+    if download is True or download is False:
+        pass
+    else:
+        raise Exception(f"'download' must be eitehr 'True' or 'False'.  Exiting...")
+        
+    if water_mask_resolution == 'None':
+        raise Exception(f"'water_mask_resolution' can be 'None' if you don't want to create one, but that is None "
+                        f", and not the string 'None'.  Exiting...")
+        
+    
+    
     # 1: Initiliase the big DEM:
     lats = np.arange(south, north, 1)
     lons = np.arange(west, east, 1)
     num_x_pixs = lons.size * samples
     num_y_pixs = lats.size * samples    
 
-    dem = null * np.ones((num_y_pixs, num_x_pixs))             # make the blank array of null values
+    dem = null * np.ones((num_y_pixs, num_x_pixs))                              # make the blank array of null values
+    if water_mask_resolution is not None:
+        water_mask = np.zeros((num_y_pixs, num_x_pixs))                                # make the blank array of 0s (ie nothing is masked)
     
     # 2: Work through each tile
     for lon in lons:                                                                                  # one column first, make the name for the tile to try and download
         for lat in lats:                                                                              # and then rows for that column
-            void_fill_skip = False                                                                  # reset for each tile
+            replaced_with_null = False                                                                  # reset for each tile
             download_success = False                                                                # reset to haven't been able to download        
             tile_name = dem_tile_namer(lon, lat)                                                    # get name of tile in format used by USGS
+            print(f"{tile_name} : Trying to open locally...", end = "")
             try:
-                print(f"{tile_name} : Trying to open locally...", end = "")
                 tile_elev = open_hgt_file(tile_name, samples, samples, tiles_folder)
                 print(' Done!')
 
@@ -97,26 +119,53 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3',
                 else:
                     pass
                     
-                if (download == 0) or (download_success == False):
-                    print(f"{tile_name} : Replacing with null values (the tile probably doesn't exist and covers only water.  ", end = "" )
+                if (download == False) or (download_success == False):
+                    print(f"{tile_name} : Replacing with nulls (probably a water only tile).  ", end = "" )
                     tile_elev = null * np.ones((samples,samples))
-                    void_fill_skip = True   
+                    replaced_with_null = True   
                     print( 'Done!')
                 else:
                     pass
                         
-                
-            #2: if required, fill voids in the tile
-            if void_fill is True and np.min(tile_elev) == (-32768) and void_fill_skip is False:                             # if there is a void in the tile, and we've said that we want to fill voids.  
-                print(f"{tile} : Filling voids in the tile... ", end = "")
-                grid_x, grid_y = np.mgrid[0:samples:1  ,0:samples:1 ]
-                valid_points = np.argwhere(tile_elev > (-32768))                                               # void are filled with -32768 perhaps?  less than -1000 should catch these
+            # 2: if required, fill voids in the tile
+            if void_fill is True and np.min(tile_elev) == (-32768) and replaced_with_null is False:                             # if there is a void in the tile, and we've said that we want to fill voids.  
+                print(f"{tile_name} : Filling voids in the tile... ", end = "")
+                grid_x, grid_y = np.mgrid[0:samples:1, 0:samples:1 ]
+                valid_points = np.argwhere(tile_elev > (-32768))                                                         # void are filled with -32768 perhaps?  less than -1000 should catch these
                 tile_elev_at_valid_points = tile_elev[valid_points[:,0], valid_points[:,1]]
                 tile_elev = griddata(valid_points, tile_elev_at_valid_points, (grid_x, grid_y), method='linear')
                 print(' Done!')
     
-            # 3: stitch the current tile into the full DEM    
+            # 3: Make the water mask for that tile
+            if  water_mask_resolution is not None:
+                if replaced_with_null:                                                                                      # if it was replaced by null, should be water so don't need to make a mask
+                    print(f"{tile_name} : Assuming water tile and masking it all...", end = '')    
+                    tile_mask = np.ones((samples,samples))                                                                 # make a mask in which all pixels are masked (as it's assumed to be a water tile)
+                else:
+                    print(f"{tile_name} : Creating a mask of water areas...", end = '')    
+                    tile_mask = water_pixel_masker(tile_elev, [lon], [lat], water_mask_resolution, verbose = False)         # or make a water mask for that tile
+                print(" Done!")
+            else:
+                pass
+                
+            # 4: stitch the current tile and water mask into their respective full arrays 
             dem[num_y_pixs-((lat+1-lats[0])*samples) :num_y_pixs-((lat-lats[0])*samples), (lon-lons[0])*samples:(lon+1-lons[0])*samples] = tile_elev
+            if  water_mask_resolution is not None:
+                water_mask[num_y_pixs-((lat+1-lats[0])*samples) :num_y_pixs-((lat-lats[0])*samples), (lon-lons[0])*samples:(lon+1-lons[0])*samples] = tile_mask
+    
+            print('')                                                                                                        # next tile output will be on a new line, which makes it easier to read.  
+            import matplotlib.pyplot as plt
+            # f, ax = plt.subplots(1)
+            # ax.imshow(water_mask)
+            
+            if lon == 0:
+                f, ax = plt.subplots(1)
+                ax.imshow(tile_mask)
+            
+    # combine the dem and the mask
+    if  water_mask_resolution is not None:
+        dem = ma.array(dem, mask = water_mask)
+    
     
     return dem, lons, lats
     
@@ -241,9 +290,10 @@ def open_hgt_file(tile_name, pixels_y, pixels_x, tile_folder = './SRTM1/', verbo
     """
     import numpy as np
     
+    #import ipdb; ipdb.set_trace()
     if verbose:
         print(f"{tile_name}: Opening the hgt file...", end = '')
-    elevations = np.fromfile(f'{tile_folder}/{tile_name}.hgt', np.dtype('>i2'))                    # get as a rank 1 array
+    elevations = np.fromfile(f'{tile_folder}{tile_name}.hgt', np.dtype('>i2'))                    # get as a rank 1 array
     tile_array = elevations.reshape((pixels_y, pixels_x))                                        # convert to rank 2
     if verbose:
         print('Done!')
@@ -253,7 +303,7 @@ def open_hgt_file(tile_name, pixels_y, pixels_x, tile_folder = './SRTM1/', verbo
 #%%
 
 
-def dem_show(matrix,lons,lats,srtm, units_deg= True):
+def dem_show(matrix,lons,lats,srtm, units_deg= True, title = None):
     """Visualise a DEM using lat lon as the axis
     Inputs:
         matrix | rank2 array | dem data to be plotted
@@ -261,11 +311,13 @@ def dem_show(matrix,lons,lats,srtm, units_deg= True):
         lats | list | lats of bottom left of each tile
         srtm1 | 1 or 3 | sets which resolution working with
          units_deg | boolean | IF ture, axes are in degrees and not pixels.  
+         title | None | or string
     Returns:
         Figure
     History:
         2020/05/11 | MEG | added to project
         2020/05/11 | MEG | Add flag to swtich between degrees and pixels
+        2020/06/04 | MEG | Add title option
     
     """
     
@@ -288,11 +340,13 @@ def dem_show(matrix,lons,lats,srtm, units_deg= True):
 
     lats2 = np.arange(lats[0], lats[-1] +2 ,1)              # to help with plotting
 
-    plt.figure()
-    plt.imshow(matrix,interpolation='none', aspect=1, vmin = 0, vmax=np.max(matrix), cmap=new_cmap)
-    cbar = plt.colorbar()
+    f, ax = plt.subplots()
+    if title is not None:
+        f.suptitle(title)
+        f.canvas.set_window_title(title)
+    plot_data = ax.imshow(matrix,interpolation='none', aspect=1, vmin = 0, vmax=np.max(matrix), cmap=new_cmap)
+    f.colorbar(plot_data)
     if units_deg:
-        ax = plt.gca()
         ax.set_xticks([i for i in range(0,((lons.size)+1)*samples,samples)])                        # tick labels only for lats
         ax.set_xticklabels(lons) 
         ax.set_yticks([i for i in range(0,((lats2.size))*samples,samples)])                         # tick labels only for lats
@@ -301,26 +355,31 @@ def dem_show(matrix,lons,lats,srtm, units_deg= True):
 #%%
 
 
-
-def water_pixel_masker(data, lons, lats, coast_resol, verbose = False):
+def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     """
-       A function to creat a mask of pixels over water. This can be very slow for big DEMs
+       A function to creat a mask of pixels over water. This can be very slow for big DEMs (best called on each tile,
+       as per SRTM_dem_make.  
+       Note the too avoid problems with edges, the fucntion works by expanding many regions to be one tile larger in all directions.  
+       Note that basemap is rather an old package, and can be problematic on Windows machines.  
+       
     Inputs:
-        data | rank 2 array | gridded data (e.g. a dem)
+        dem | rank 2 array | gridded data (e.g. a dem)
         lons | list | lons of bottom left of each tile
         lats | list | lats of bottom left of each tile
         coast_resol | str | resolution of vector coastlines: c l i h f 
        
     Output:
         result_ary | rank 2 array | array to be used as pixel mask
-        
-    2017/03/01 | adapterd from dem_show_oceans_detailed_2
-    """
-     
     
+    Hitory:
+        2017/03/01 | MEG  | adapterd from dem_show_oceans_detailed_2
+        2020/05/18 | MEG | Update to ensure that pixels at the edge that fall on the edge of a land polygon are included
+                            (by expanding the plot by 1 deg in each direction)
+        2020/06/02 | MEG | Fix bug when masking large DEMS (ie not just a single tile)
+    """
+         
     from matplotlib.path import Path
     import numpy as np
-    import numpy.ma as ma
     import matplotlib.pyplot as plt
     import platform
     import os
@@ -335,35 +394,41 @@ def water_pixel_masker(data, lons, lats, coast_resol, verbose = False):
     from mpl_toolkits.basemap import Basemap
     
     if verbose:
-        print('Creating a mask of pixels that lie in water (sea and lakes).  This can be slow')
+        print('Creating a mask of pixels that lie in water (sea and lakes)... ', end = '')
+                
+    # 1: make the Basemap figure used to determine where water is    
+    ny = dem.shape[0]                                                                                           # number of pixels vetically
+    nx = dem.shape[1]                                                                                           # and horizontally            
+    pixs_per_deg = int(nx / len(lons))                                                                          # determine the DEM resolution
+    ll_extent = [lons[0]-1, (lons[-1]+1)+1, lats[0]-1, (lats[-1]+1)+1]                                          # get size of area we're interested in, but exand by one in each direction to avoid problems with edges.  
+                                                                                                                # note that lons and lats are of lower left of each tile, so to get edges of those, need to add one to upper and right.  
+    plt.figure()                                                                                                # need a figure instance for basemap
+    map = Basemap(projection='cyl', llcrnrlat=ll_extent[2],urcrnrlat=ll_extent[3],
+                                    llcrnrlon=ll_extent[0],urcrnrlon=ll_extent[1], resolution=coast_resol)      # make the figure with coastlines, edges have already been expanded by ll extent
+    map.drawcoastlines()    
+    mesh_lons, mesh_lats = map.makegrid((nx + 2*pixs_per_deg), (ny + 2*pixs_per_deg))                                               # get lat/lons of in evenly spaced grid with increments at expanded size
     
+                                                                                                      # ie there are two extra tiles in x direction and two extra in y direction
+    lons_1d = np.ravel(mesh_lons[pixs_per_deg:-pixs_per_deg,pixs_per_deg:-pixs_per_deg])              # get lon only for area of interest (ie not expanded size)
+    lats_1d = np.ravel(mesh_lats[pixs_per_deg:-pixs_per_deg, pixs_per_deg:-pixs_per_deg])             # and lats
+    x, y = map(lons_1d, lats_1d)                                                                      # get coords on map - not sure if needed with this projection? 
+    locations = np.c_[x, y]                                                                           # concatenate to one array (ie pair of coords for each pixel in the DEM)
     
-    
-    ll_extent = [lons[0], (lons[-1]+1), lats[0], (lats[-1]+1)]
-    ny = data.shape[0]; nx = data.shape[1]
-    plt.figure()                                                                # need a figure instance for basemap
-    map = Basemap(projection='cyl', llcrnrlat=ll_extent[2],urcrnrlat=ll_extent[3],llcrnrlon=ll_extent[0],urcrnrlon=ll_extent[1], resolution=coast_resol)
-    map.drawcoastlines()
-    
-    
-    mesh_lons, mesh_lats = map.makegrid(nx, ny)               # get lat/lons of in evenly spaced grid with increments to match data matrix
-    lons = np.ravel(mesh_lons)
-    lats = np.ravel(mesh_lats)
-    x, y = map(lons, lats)
-    locations = np.c_[x, y]                                                     # concatenate to one array
-    
-    result = np.zeros(len(locations), dtype=bool)                                  # initialise as false
-    land_polygons = [Path(p.boundary) for p in map.landpolygons]                    # check if land
+    result = np.zeros(len(locations), dtype=bool)                                           # initialise as false
+    land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # check if land
     for polygon in land_polygons:
-        result += np.array(polygon.contains_points(locations))
-    lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                    # check if in lake
+        result += np.array(polygon.contains_points(locations))                              # check if all the DEM pixels ("locations") are in land or not
+    lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                            # check if in lake
     for polygon in lake_polygons:
-        result = np.invert(np.array(polygon.contains_points(locations)))              # pixels in lakes are 1s, so subtract these.  
-    result = np.invert(result)                                                       # true if in see, so masked out
+        result = np.invert(np.array(polygon.contains_points(locations)))                    # pixels in lakes are 1s, so subtract these.  
+    result = np.invert(result)                                                              # true if in sea, so masked out
     result_ary = np.flipud(np.reshape(result, (ny, nx)))
-    plt.close()                                                                 # close figure instance
+    
+    plt.close()
+    if verbose:
+        print('Done!')
+    
     return result_ary
-
 
 
 
