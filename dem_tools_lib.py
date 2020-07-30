@@ -358,7 +358,7 @@ def dem_show(matrix,lons,lats,srtm, units_deg= True, title = None):
 def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     """
        A function to creat a mask of pixels over water. This can be very slow for big DEMs (best called on each tile,
-       as per SRTM_dem_make.  
+       as per SRTM_dem_make).  
        Note the too avoid problems with edges, the fucntion works by expanding many regions to be one tile larger in all directions.  
        Note that basemap is rather an old package, and can be problematic on Windows machines.  
        
@@ -376,6 +376,7 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
         2020/05/18 | MEG | Update to ensure that pixels at the edge that fall on the edge of a land polygon are included
                             (by expanding the plot by 1 deg in each direction)
         2020/06/02 | MEG | Fix bug when masking large DEMS (ie not just a single tile)
+        2020/07/29 | MEG | Fix bug for masking of lakes.  
     """
          
     from matplotlib.path import Path
@@ -406,7 +407,7 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     map = Basemap(projection='cyl', llcrnrlat=ll_extent[2],urcrnrlat=ll_extent[3],
                                     llcrnrlon=ll_extent[0],urcrnrlon=ll_extent[1], resolution=coast_resol)      # make the figure with coastlines, edges have already been expanded by ll extent
     map.drawcoastlines()    
-    mesh_lons, mesh_lats = map.makegrid((nx + 2*pixs_per_deg), (ny + 2*pixs_per_deg))                                               # get lat/lons of in evenly spaced grid with increments at expanded size
+    mesh_lons, mesh_lats = map.makegrid((nx + 2*pixs_per_deg), (ny + 2*pixs_per_deg))                           # get lat/lons of in evenly spaced grid with increments at expanded size
     
                                                                                                       # ie there are two extra tiles in x direction and two extra in y direction
     lons_1d = np.ravel(mesh_lons[pixs_per_deg:-pixs_per_deg,pixs_per_deg:-pixs_per_deg])              # get lon only for area of interest (ie not expanded size)
@@ -414,21 +415,24 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     x, y = map(lons_1d, lats_1d)                                                                      # get coords on map - not sure if needed with this projection? 
     locations = np.c_[x, y]                                                                           # concatenate to one array (ie pair of coords for each pixel in the DEM)
     
-    result = np.zeros(len(locations), dtype=bool)                                           # initialise as false
-    land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # check if land
-    for polygon in land_polygons:
-        result += np.array(polygon.contains_points(locations))                              # check if all the DEM pixels ("locations") are in land or not
-    lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                            # check if in lake
-    for polygon in lake_polygons:
-        result = np.invert(np.array(polygon.contains_points(locations)))                    # pixels in lakes are 1s, so subtract these.  
-    result = np.invert(result)                                                              # true if in sea, so masked out
-    result_ary = np.flipud(np.reshape(result, (ny, nx)))
-    
+    land_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
+    land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # get a list of the land polygons.  Each "island" of land is own item
+    for polygon in land_polygons:                                                           # loop through each of these
+        land_mask += np.array(polygon.contains_points(locations))                           # True if pixel is in land
+    land_mask =  np.flipud(np.reshape(land_mask, (ny, nx)))                                 # reshape, not sure why flipud?
+    lake_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
+    lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                            # get a list of lakes
+    for polygon in lake_polygons:                                                           # loop through each of these     
+        lake_mask += np.array(polygon.contains_points(locations))                           # True if in lake
+    lake_mask = np.flipud(np.reshape(lake_mask, (ny, nx)))                                  # reshape, again not sure why flipud
+    land_lake_mask = np.logical_and(land_mask, np.invert(lake_mask))                        # land is where land is true and lake is not true
+    water_mask = np.invert(land_lake_mask)                                                  # water is where not land
+
     plt.close()
     if verbose:
         print('Done!')
     
-    return result_ary
+    return water_mask
 
 
 
