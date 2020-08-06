@@ -415,8 +415,10 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
 
 
     # 2: make a meshgrid for each pixel in the dem.  
-    x = np.arange(lon_lat_ll[0], lon_lat_ur[0], 1/pixs_per_deg)
-    y = np.arange(lon_lat_ll[1], lon_lat_ur[1], 1/pixs_per_deg)
+    # x = np.arange(lon_lat_ll[0], lon_lat_ur[0], 1/pixs_per_deg)
+    # y = np.arange(lon_lat_ll[1], lon_lat_ur[1], 1/pixs_per_deg)
+    x = np.linspace(lon_lat_ll[0], lon_lat_ur[0], nx)
+    y = np.linspace(lon_lat_ll[1], lon_lat_ur[1], ny)
     xx, yy = np.meshgrid(x,y)
     locations = np.hstack((np.ravel(xx)[:,np.newaxis], np.ravel(yy)[:,np.newaxis]))
     
@@ -429,7 +431,8 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     map = Basemap(projection='cyl', llcrnrlat=ll_extent[2],urcrnrlat=ll_extent[3],
                                     llcrnrlon=ll_extent[0],urcrnrlon=ll_extent[1], resolution=coast_resol)      # make the figure with coastlines, edges have already been expanded by ll extent
     map.drawcoastlines()
-       
+
+    #import ipdb; ipdb.set_trace()       
     
     land_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
     land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # get a list of the land polygons.  Each "island" of land is own item
@@ -440,6 +443,9 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                            # get a list of lakes
     for polygon in lake_polygons:                                                           # loop through each of these     
         lake_mask += np.array(polygon.contains_points(locations))                           # True if in lake
+    
+
+    
     lake_mask = np.flipud(np.reshape(lake_mask, (ny, nx)))                                  # reshape, again not sure why flipud
     land_lake_mask = np.logical_and(land_mask, np.invert(lake_mask))                        # land is where land is true and lake is not true
     water_mask = np.invert(land_lake_mask)                                                  # water is where not land
