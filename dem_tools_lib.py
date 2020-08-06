@@ -40,6 +40,11 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
     #import os 
     from scipy.interpolate import griddata             # for interpolating over any voids
 
+    if west > east:
+        raise Exception(f"'west' ({west}) must always be smaller than 'east' ({east}).  If west of Grenwich, values should be negative.  Exiting. ")
+    if south > north:
+        raise Exception(f"'south' ({south}) must always be smaller than 'north' ({north}).  If south of the equator, values should be negative.  Exiting. ")
+
     print(f"Making a dem between {west} and {east} longitude, and {south} and {north} latitude.  ")
     if water_mask_resolution is None:
         print(f"{SRTM1_or3} tiles will be used, and water bodies won't be masked.  ")
@@ -143,7 +148,8 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                     tile_mask = np.ones((samples,samples))                                                                 # make a mask in which all pixels are masked (as it's assumed to be a water tile)
                 else:
                     print(f"{tile_name} : Creating a mask of water areas...", end = '')    
-                    tile_mask = water_pixel_masker(tile_elev, [lon], [lat], water_mask_resolution, verbose = False)         # or make a water mask for that tile
+                    tile_mask = water_pixel_masker(tile_elev, (lon, lat), (lon+1, lat+1), water_mask_resolution, 
+                                                   pixs_per_deg = samples, verbose = False)         # or make a water mask for that tile
                 print(" Done!")
             else:
                 pass
@@ -355,7 +361,8 @@ def dem_show(matrix,lons,lats,srtm, units_deg= True, title = None):
 #%%
 
 
-def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
+def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False, pixs_per_deg = 1201,
+                       debug_mode = False):
     """
        A function to creat a mask of pixels over water. This can be very slow for big DEMs (best called on each tile,
        as per SRTM_dem_make).  
@@ -364,9 +371,11 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
        
     Inputs:
         dem | rank 2 array | gridded data (e.g. a dem)
-        lons | list | lons of bottom left of each tile
-        lats | list | lats of bottom left of each tile
+        lon_lat_ll | tuple| lon lat of lower left corner of dem.  Must be floats! 
+        lon_lat_ur | tuple| lon lat of upper right corner of dem
         coast_resol | str | resolution of vector coastlines: c l i h f 
+        pixs_per_deg | int | number of pixels in 1 degree.  1201 for 3 arc second SRTM3 data.  
+        debug_mode | Boolean | If true, a simple figure of the data and the coastlines is produced.  
        
     Output:
         result_ary | rank 2 array | array to be used as pixel mask
@@ -377,6 +386,7 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
                             (by expanding the plot by 1 deg in each direction)
         2020/06/02 | MEG | Fix bug when masking large DEMS (ie not just a single tile)
         2020/07/29 | MEG | Fix bug for masking of lakes.  
+        2020/08/05 | MEG | Reduce extra area added around dem to speed up masking.  
     """
          
     from matplotlib.path import Path
@@ -384,6 +394,8 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     import matplotlib.pyplot as plt
     import platform
     import os
+    
+    edge_fraction = 0.1
     
     if platform.system() == 'Windows':                                                                              # check if windows as can be tricky with basemap
         try:
@@ -397,23 +409,27 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     if verbose:
         print('Creating a mask of pixels that lie in water (sea and lakes)... ', end = '')
                 
-    # 1: make the Basemap figure used to determine where water is    
+    # 1: deal with sizes of various things and make a grid of points
     ny = dem.shape[0]                                                                                           # number of pixels vetically
     nx = dem.shape[1]                                                                                           # and horizontally            
-    pixs_per_deg = int(nx / len(lons))                                                                          # determine the DEM resolution
-    ll_extent = [lons[0]-1, (lons[-1]+1)+1, lats[0]-1, (lats[-1]+1)+1]                                          # get size of area we're interested in, but exand by one in each direction to avoid problems with edges.  
-                                                                                                                # note that lons and lats are of lower left of each tile, so to get edges of those, need to add one to upper and right.  
+
+
+    # 2: make a meshgrid for each pixel in the dem.  
+    x = np.arange(lon_lat_ll[0], lon_lat_ur[0], 1/pixs_per_deg)
+    y = np.arange(lon_lat_ll[1], lon_lat_ur[1], 1/pixs_per_deg)
+    xx, yy = np.meshgrid(x,y)
+    locations = np.hstack((np.ravel(xx)[:,np.newaxis], np.ravel(yy)[:,np.newaxis]))
+    
+       
+   
+    # 2 Make the basemap figure
+    ll_extent = [lon_lat_ll[0]-edge_fraction, lon_lat_ur[0]+edge_fraction, 
+                 lon_lat_ll[1]-edge_fraction, lon_lat_ur[1]+edge_fraction]                    # get the west east south north extent of the region needed by basemap.  Expand by 0.1 of a degree as edges can be difficult
     plt.figure()                                                                                                # need a figure instance for basemap
     map = Basemap(projection='cyl', llcrnrlat=ll_extent[2],urcrnrlat=ll_extent[3],
                                     llcrnrlon=ll_extent[0],urcrnrlon=ll_extent[1], resolution=coast_resol)      # make the figure with coastlines, edges have already been expanded by ll extent
-    map.drawcoastlines()    
-    mesh_lons, mesh_lats = map.makegrid((nx + 2*pixs_per_deg), (ny + 2*pixs_per_deg))                           # get lat/lons of in evenly spaced grid with increments at expanded size
-    
-                                                                                                      # ie there are two extra tiles in x direction and two extra in y direction
-    lons_1d = np.ravel(mesh_lons[pixs_per_deg:-pixs_per_deg,pixs_per_deg:-pixs_per_deg])              # get lon only for area of interest (ie not expanded size)
-    lats_1d = np.ravel(mesh_lats[pixs_per_deg:-pixs_per_deg, pixs_per_deg:-pixs_per_deg])             # and lats
-    x, y = map(lons_1d, lats_1d)                                                                      # get coords on map - not sure if needed with this projection? 
-    locations = np.c_[x, y]                                                                           # concatenate to one array (ie pair of coords for each pixel in the DEM)
+    map.drawcoastlines()
+       
     
     land_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
     land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # get a list of the land polygons.  Each "island" of land is own item
@@ -428,7 +444,12 @@ def water_pixel_masker(dem, lons, lats, coast_resol, verbose = False):
     land_lake_mask = np.logical_and(land_mask, np.invert(lake_mask))                        # land is where land is true and lake is not true
     water_mask = np.invert(land_lake_mask)                                                  # water is where not land
 
-    plt.close()
+    if debug_mode == False:
+        plt.close()
+    else:
+        #im1 = map.pcolormesh(x,y[::-1],dem,shading='flat',cmap=plt.cm.terrain,latlon=True, vmin = 0)
+        im1 = map.pcolormesh(x,y[::-1],land_lake_mask,cmap=plt.cm.terrain,latlon=True,)
+    
     if verbose:
         print('Done!')
     

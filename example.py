@@ -33,11 +33,21 @@ dem_show(dem,lons,lats,srtm = 1, units_deg = True, title = 'SRTM1 DEM')         
 
 #%% Or make a DEM, and mask the water in a separate step.   
 
-dem, lons, lats =  SRTM_dem_make(11, 13, 41, 43, SRTM1_or3 = 'SRTM3', SRTM3_tiles_folder = './SRTM3/',
+dem2, lons2, lats2 =  SRTM_dem_make(11, 13, 41, 43, SRTM1_or3 = 'SRTM3', SRTM3_tiles_folder = './SRTM3/',
                                   water_mask_resolution = None, download = True)                                    # make the dem
 
-standalone_mask =  water_pixel_masker(dem, lons, lats, 'i', verbose = True)
+standalone_mask =  water_pixel_masker(dem2, (lons2[0], lats2[0]), (lons2[-1]+1, lats2[-1]+1), 'h', verbose = True)
 
-dem_show(ma.array(dem, mask = standalone_mask),lons,lats,srtm = 3, units_deg = True, title = 'SRTM3 DEM - standalone mask')                                  # plot the DEM
+dem_show(ma.array(dem2, mask = standalone_mask),lons,lats,srtm = 3, units_deg = True, title = 'SRTM3 DEM - standalone mask')                                  # plot the DEM
+
+
+
+
+
+
+
+
+
+
 
 #%%
