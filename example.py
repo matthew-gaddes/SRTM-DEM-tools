@@ -40,14 +40,3 @@ standalone_mask =  water_pixel_masker(dem2, (lons2[0], lats2[0]), (lons2[-1]+1, 
 
 dem_show(ma.array(dem2, mask = standalone_mask),lons,lats,srtm = 3, units_deg = True, title = 'SRTM3 DEM - standalone mask')                                  # plot the DEM
 
-
-
-
-
-
-
-
-
-
-
-#%%

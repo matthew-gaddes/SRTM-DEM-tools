@@ -38,7 +38,6 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
     import numpy as np
     import numpy.ma as ma
     #import os 
-    from scipy.interpolate import griddata             # for interpolating over any voids
 
     if west > east:
         raise Exception(f"'west' ({west}) must always be smaller than 'east' ({east}).  If west of Grenwich, values should be negative.  Exiting. ")
@@ -133,12 +132,9 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                     pass
                         
             # 2: if required, fill voids in the tile
-            if void_fill is True and np.min(tile_elev) == (-32768) and replaced_with_null is False:                             # if there is a void in the tile, and we've said that we want to fill voids.  
+            if void_fill is True and np.min(tile_elev) == (-32768) and replaced_with_null is False:                             # if there is a void in the tile, and we've said that we want to fill voids, and it's not a tile we can't find and have filled with nulls
                 print(f"{tile_name} : Filling voids in the tile... ", end = "")
-                grid_x, grid_y = np.mgrid[0:samples:1, 0:samples:1 ]
-                valid_points = np.argwhere(tile_elev > (-32768))                                                         # void are filled with -32768 perhaps?  less than -1000 should catch these
-                tile_elev_at_valid_points = tile_elev[valid_points[:,0], valid_points[:,1]]
-                tile_elev = griddata(valid_points, tile_elev_at_valid_points, (grid_x, grid_y), method='linear')
+                tile_elev = fill_gridata_voids(tile_elev)                
                 print(' Done!')
     
             # 3: Make the water mask for that tile
@@ -149,7 +145,7 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                 else:
                     print(f"{tile_name} : Creating a mask of water areas...", end = '')    
                     tile_mask = water_pixel_masker(tile_elev, (lon, lat), (lon+1, lat+1), water_mask_resolution, 
-                                                   pixs_per_deg = samples, verbose = False)         # or make a water mask for that tile
+                                                   pixs_per_deg = samples, verbose = False)                                 # or make a water mask for that tile
                 print(" Done!")
             else:
                 pass
@@ -272,7 +268,28 @@ def srtm3_tile_downloader(tile_name, hgt_path = './SRTM3_tiles/', verbose = Fals
         
     return download_success    
   
-        
+   
+#%%
+
+def fill_gridata_voids(tile, void_value = -32786):
+    """A function to fill voids in grided data using  scipy's interpolate function.
+    Input:
+        tile | rank 2 array | gridded data, containing voids
+        void_value | ? | value that voids are filled with.  e.g. -32768 for SRTM data.  
+    Returns:
+        tile_filled  rank 2 array | gridded data, now without voids.  
+    History:
+        2020/08/13 | MEG | Modified from script.  
+    """
+    import numpy as np
+    from scipy.interpolate import griddata             # for interpolating over any voids
+
+    grid_x, grid_y = np.mgrid[0:tile.shape[1]:1, 0:tile.shape[0]:1 ]
+    valid_points = np.argwhere(tile != void_value)                                                         # void are filled with -32768 perhaps?  less than -1000 should catch these
+    tile_at_valid_points = tile[valid_points[:,0], valid_points[:,1]]
+    tile_filled = griddata(valid_points, tile_at_valid_points, (grid_x, grid_y), method='linear')
+    return tile_filled
+     
 #%%
 def dem_tile_namer(lon, lat):    
     """ Given longitude and latitude in the form of - for west south, conver to 
@@ -387,6 +404,7 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
         2020/06/02 | MEG | Fix bug when masking large DEMS (ie not just a single tile)
         2020/07/29 | MEG | Fix bug for masking of lakes.  
         2020/08/05 | MEG | Reduce extra area added around dem to speed up masking.  
+        2020/08/13 | MEG | Fix bug in water masking for tiles with no water bodies.  
     """
          
     from matplotlib.path import Path
@@ -412,43 +430,40 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     # 1: deal with sizes of various things and make a grid of points
     ny = dem.shape[0]                                                                                           # number of pixels vetically
     nx = dem.shape[1]                                                                                           # and horizontally            
-
-
-    # 2: make a meshgrid for each pixel in the dem.  
-    # x = np.arange(lon_lat_ll[0], lon_lat_ur[0], 1/pixs_per_deg)
-    # y = np.arange(lon_lat_ll[1], lon_lat_ur[1], 1/pixs_per_deg)
     x = np.linspace(lon_lat_ll[0], lon_lat_ur[0], nx)
     y = np.linspace(lon_lat_ll[1], lon_lat_ur[1], ny)
     xx, yy = np.meshgrid(x,y)
     locations = np.hstack((np.ravel(xx)[:,np.newaxis], np.ravel(yy)[:,np.newaxis]))
-    
-       
-   
+     
     # 2 Make the basemap figure
     ll_extent = [lon_lat_ll[0]-edge_fraction, lon_lat_ur[0]+edge_fraction, 
                  lon_lat_ll[1]-edge_fraction, lon_lat_ur[1]+edge_fraction]                    # get the west east south north extent of the region needed by basemap.  Expand by 0.1 of a degree as edges can be difficult
     plt.figure()                                                                                                # need a figure instance for basemap
     map = Basemap(projection='cyl', llcrnrlat=ll_extent[2],urcrnrlat=ll_extent[3],
                                     llcrnrlon=ll_extent[0],urcrnrlon=ll_extent[1], resolution=coast_resol)      # make the figure with coastlines, edges have already been expanded by ll extent
-    map.drawcoastlines()
-
-    #import ipdb; ipdb.set_trace()       
-    
-    land_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
-    land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # get a list of the land polygons.  Each "island" of land is own item
-    for polygon in land_polygons:                                                           # loop through each of these
-        land_mask += np.array(polygon.contains_points(locations))                           # True if pixel is in land
-    land_mask =  np.flipud(np.reshape(land_mask, (ny, nx)))                                 # reshape, not sure why flipud?
-    lake_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
-    lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                            # get a list of lakes
-    for polygon in lake_polygons:                                                           # loop through each of these     
-        lake_mask += np.array(polygon.contains_points(locations))                           # True if in lake
-    
+    #import sys; sys.exit()
+    try:
+        map.drawcoastlines()
+        no_water_tile = False
+    except:
+        no_water_tile = True
 
     
-    lake_mask = np.flipud(np.reshape(lake_mask, (ny, nx)))                                  # reshape, again not sure why flipud
-    land_lake_mask = np.logical_and(land_mask, np.invert(lake_mask))                        # land is where land is true and lake is not true
-    water_mask = np.invert(land_lake_mask)                                                  # water is where not land
+    if no_water_tile:
+        water_mask = np.zeros(dem.shape)
+    else:
+        land_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
+        land_polygons = [Path(p.boundary) for p in map.landpolygons]                            # get a list of the land polygons.  Each "island" of land is own item
+        for polygon in land_polygons:                                                           # loop through each of these
+            land_mask += np.array(polygon.contains_points(locations))                           # True if pixel is in land
+        land_mask =  np.flipud(np.reshape(land_mask, (ny, nx)))                                 # reshape, not sure why flipud?
+        lake_mask = np.zeros(len(locations), dtype=bool)                                        # initialise as false
+        lake_polygons = [Path(p.boundary) for p in map.lakepolygons]                            # get a list of lakes
+        for polygon in lake_polygons:                                                           # loop through each of these     
+            lake_mask += np.array(polygon.contains_points(locations))                           # True if in lake   
+        lake_mask = np.flipud(np.reshape(lake_mask, (ny, nx)))                                  # reshape, again not sure why flipud
+        land_lake_mask = np.logical_and(land_mask, np.invert(lake_mask))                        # land is where land is true and lake is not true
+        water_mask = np.invert(land_lake_mask)                                                  # water is where not land
 
     if debug_mode == False:
         plt.close()
