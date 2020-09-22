@@ -12,7 +12,10 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                   SRTM1_tiles_folder = './SRTM1/', SRTM3_tiles_folder = './SRTM3/',
                   ed_username = None, ed_password = None, download = True, void_fill = False):
     """
-    Given lons and lats (integers), make a multi tile DEM from either SRTM1 or 3 data.  
+    Given lons and lats (integers), make a multi tile DEM from either SRTM1 or 3 data.   Note that there are two approached used for masking water bodies in the DEM.  For large DEMS, the mask must be calculated on a tile by tile basis 
+    (or it becomes painfully slow, or exceeds RAM requirements), but for small DEMS it can be much faster to create the DEM, crop it (e.g. to a 20x20km size), and then calculate the mask.  
+    This decision is made by determine_masking_stratergy
+    
     Inputs:
         west | -179 -> 180 | west of GMT is negative
         east | -179 -> 180 | west of GMT is negative
@@ -30,14 +33,41 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
         void_fill | boolean | If true, will try to linearly interpolate across voids in data.  
     
     Output:
-        dem | rank 2 array | the dem
-        lons | rank 1 array | longitude of bottom left of each 1' x1' grid cell
-        lats | rank 1 array | latitude of bottom left of each 1' x1' grid cell
+        dem | rank 2 array | the DEM, usually as a masked array with water bodies masked, but if resolution is "none" then this is just a numpy array.  
+        lons_mg | rank 2 array | The lons of each pixel in the DEM.  Product of np.meshgrid
+        lats_mg | rank 2 array | The lats of each pixel in the DEM.  Products of np.meshgrid.  
+    History:
+        2020/04/?? | MEG | Much of this was written during Covid-19 lockdown for a project work with Strava file.  
+        2020/09/21 | MEG | Update to handle non-integer extents (ie. teh western edge need no longer be an integer).  WIP
     """
     #import matplotlib.pyplot as plt
     import numpy as np
     import numpy.ma as ma
     #import os 
+    
+    def determine_masking_stratergy(west, east, south, north, area_threshold = 1.0):
+        """ Determine the area of a DEM (in number of 1'x1' squares) and return if this is bigger than 
+        a certain threshold.  
+        Inputs:
+            west | float or int | western edge of dem.  Same for other three.  
+            area_threshold | float | if the area of the DEM is larger than this, return that masking should
+                                      be done before cropping
+        Returns:
+            mask_before_crop | boolean | True is area of DEM is larger than the area_threshold
+        History:
+            2020/09/22 | MEG | Written.  
+            
+        """
+        del_x = east - west
+        del_y = north - south
+        if (del_x * del_y) > area_threshold:
+            mask_before_crop = True
+        else:
+            mask_before_crop = False
+        return mask_before_crop
+    
+
+    ########### Begin
 
     if west > east:
         raise Exception(f"'west' ({west}) must always be smaller than 'east' ({east}).  If west of Grenwich, values should be negative.  Exiting. ")
@@ -55,11 +85,11 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
     
     # 0: determine resolution and check inputs
     if SRTM1_or3 == 'SRTM3':
-        samples = 1201
+        pixs2deg = 1201
         SRTM3 = True
         tiles_folder = SRTM3_tiles_folder
     elif SRTM1_or3 == 'SRTM1':
-        samples = 3601
+        pixs2deg = 3601
         SRTM3 = False
         tiles_folder = SRTM1_tiles_folder
     else:
@@ -75,12 +105,18 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                         f", and not the string 'None'.  Exiting...")
         
     
+    west_i, east_i, south_i, north_i = get_tile_edges(west, east, south, north)                                                      # edges can be floats.  Get the edges in whole numbers of tiles
+    mask_before_crop = determine_masking_stratergy(west, east, south, north, area_threshold = 1.0)                                  # determine when water masking should occur.  
+    
+    #import ipdb; ipdb.set_trace()
+    if (not mask_before_crop) and (water_mask_resolution is not None):
+        print(f"The area of the DEM is sufficently low that water masking will be done for the whole DEM, and not for each tile.  ")
     
     # 1: Initiliase the big DEM:
-    lats = np.arange(south, north, 1)
-    lons = np.arange(west, east, 1)
-    num_x_pixs = lons.size * samples
-    num_y_pixs = lats.size * samples    
+    lats = np.arange(south_i, north_i, 1)
+    lons = np.arange(west_i, east_i, 1)
+    num_x_pixs = lons.size * pixs2deg
+    num_y_pixs = lats.size * pixs2deg    
 
     dem = null * np.ones((num_y_pixs, num_x_pixs))                              # make the blank array of null values
     if water_mask_resolution is not None:
@@ -94,7 +130,7 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
             tile_name = dem_tile_namer(lon, lat)                                                    # get name of tile in format used by USGS
             print(f"{tile_name} : Trying to open locally...", end = "")
             try:
-                tile_elev = open_hgt_file(tile_name, samples, samples, tiles_folder)
+                tile_elev = open_hgt_file(tile_name, pixs2deg, pixs2deg, tiles_folder)
                 print(' Done!')
 
             except:
@@ -115,7 +151,7 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                     if download_success:
                         print( 'Done!')
                         print(f"{tile_name} : Opening the .hgt file", end = "" )
-                        tile_elev = open_hgt_file(tile_name, samples, samples, tiles_folder)
+                        tile_elev = open_hgt_file(tile_name, pixs2deg, pixs2deg, tiles_folder)
                         print( ' Done!')
                     else:
                         print(' Failed.  ')
@@ -125,7 +161,7 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                     
                 if (download == False) or (download_success == False):
                     print(f"{tile_name} : Replacing with nulls (probably a water only tile).  ", end = "" )
-                    tile_elev = null * np.ones((samples,samples))
+                    tile_elev = null * np.ones((pixs2deg,pixs2deg))
                     replaced_with_null = True   
                     print( 'Done!')
                 else:
@@ -138,40 +174,67 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                 print(' Done!')
     
             # 3: Make the water mask for that tile
-            if  water_mask_resolution is not None:
+            if  water_mask_resolution is not None and mask_before_crop:                                                     # if we're masking water, and doing it before cropping.  
                 if replaced_with_null:                                                                                      # if it was replaced by null, should be water so don't need to make a mask
                     print(f"{tile_name} : Assuming water tile and masking it all...", end = '')    
-                    tile_mask = np.ones((samples,samples))                                                                 # make a mask in which all pixels are masked (as it's assumed to be a water tile)
+                    tile_mask = np.ones((pixs2deg,pixs2deg))                                                                 # make a mask in which all pixels are masked (as it's assumed to be a water tile)
                 else:
                     print(f"{tile_name} : Creating a mask of water areas...", end = '')    
                     tile_mask = water_pixel_masker(tile_elev, (lon, lat), (lon+1, lat+1), water_mask_resolution, 
-                                                   pixs_per_deg = samples, verbose = False)                                 # or make a water mask for that tile
+                                                   pixs_per_deg = pixs2deg, verbose = False)                                 # or make a water mask for that tile
                 print(" Done!")
             else:
                 pass
                 
             # 4: stitch the current tile and water mask into their respective full arrays 
-            dem[num_y_pixs-((lat+1-lats[0])*samples) :num_y_pixs-((lat-lats[0])*samples), (lon-lons[0])*samples:(lon+1-lons[0])*samples] = tile_elev
-            if  water_mask_resolution is not None:
-                water_mask[num_y_pixs-((lat+1-lats[0])*samples) :num_y_pixs-((lat-lats[0])*samples), (lon-lons[0])*samples:(lon+1-lons[0])*samples] = tile_mask
-    
+            dem[num_y_pixs-((lat+1-lats[0])*pixs2deg) :num_y_pixs-((lat-lats[0])*pixs2deg), (lon-lons[0])*pixs2deg:(lon+1-lons[0])*pixs2deg] = tile_elev
+            if  water_mask_resolution is not None and mask_before_crop:
+                water_mask[num_y_pixs-((lat+1-lats[0])*pixs2deg) :num_y_pixs-((lat-lats[0])*pixs2deg), (lon-lons[0])*pixs2deg:(lon+1-lons[0])*pixs2deg] = tile_mask
             print('')                                                                                                        # next tile output will be on a new line, which makes it easier to read.  
-            import matplotlib.pyplot as plt
-            # f, ax = plt.subplots(1)
-            # ax.imshow(water_mask)
-            
-            if lon == 0:
-                f, ax = plt.subplots(1)
-                ax.imshow(tile_mask)
-            
-    # combine the dem and the mask
-    if  water_mask_resolution is not None:
-        dem = ma.array(dem, mask = water_mask)
-    
-    
-    return dem, lons, lats
-    
 
+    # 5: crop the dem                                                                                               # 
+    ll_pixels = ll2xy(((lons[0], lats[0])), pixs2deg, np.array([[west, south]]))                                    # Conver the lon and lat limits of the DEM to pixels coordinates in the dem we've made, ll = lower left corner
+    ur_pixels = ll2xy(((lons[0], lats[0])), pixs2deg, np.array([[east, north]]))                                    # ur = upper right corner
+    
+    if mask_before_crop:
+        if  water_mask_resolution is not None:
+            dem = ma.array(dem, mask = water_mask)                                                                            # possbily conver the DEM from an array to a masked array.
+        dem = dem[dem.shape[0]-ur_pixels[0][1] : dem.shape[0]-ll_pixels[0][1] , ll_pixels[0][0] : ur_pixels[0][0] ]           # crop the DEM, which may be a masked array (see above), or it may just be an array
+                                                                                                                              # Nb matrix notation starts from the top left, so y has conversions from xy coordinate of pixel (which is from lower left)
+
+    else:        
+        print("Masking the water bodies in the entire DEM (as its area was determine to be below 1 tile)... ", end = '')
+        dem = dem[dem.shape[0]-ur_pixels[0][1] : dem.shape[0]-ll_pixels[0][1] , ll_pixels[0][0] : ur_pixels[0][0] ]           # crop the DEM, which is still an array.  
+        dem_mask = water_pixel_masker(dem, (west, south), (east, north), water_mask_resolution, 
+                                                   pixs_per_deg = pixs2deg, verbose = False)                                  # make the water mask for the entire DEM.         
+        dem = ma.array(dem, mask = dem_mask)                                                                                # convert the DEM from an array to a masked array.
+        print("Done!")
+        
+    # 6: make long and lats for each pixel in the DEM
+    lons_mg, lats_mg = np.meshgrid(np.linspace(west, east-(1/pixs2deg), dem.shape[1]), np.linspace(south, north-(1/pixs2deg), dem.shape[0]))        # lons and lats are for the lower left corner of eahc pixel, so we stop (east and north)
+                                                                                                                                                    # the size of 1 pixel before the edge of the DEM
+    return dem, lons_mg, lats_mg
+  
+#%% should this be rewritten 
+
+def get_tile_edges(west, east, south, north):
+    """ Given DEM limits as floats (ie not integers), determine the limits of the DEM in integers.  
+    e.g. if western limit is 3.5, this will return 3 as the western extent of the westernmost tile required.  
+    Inputs:
+        west | float or int | western edge of dem.  
+        as above for other edges.  
+    Returns:
+        west_i | int | western edge of tile required to span the DEM
+        as above for the other edges.  
+    History:
+        2020/09/21 | MEG | Written """
+    import numpy as np
+    
+    west_i = int(np.floor(west))
+    east_i = int(np.ceil(east))
+    south_i = int(np.floor(south))
+    north_i = int(np.ceil(north))
+    return west_i, east_i, south_i, north_i
 
 #%%
 
@@ -271,7 +334,7 @@ def srtm3_tile_downloader(tile_name, hgt_path = './SRTM3_tiles/', verbose = Fals
    
 #%%
 
-def fill_gridata_voids(tile, void_value = -32786):
+def fill_gridata_voids(tile, void_value = -32768):
     """A function to fill voids in grided data using  scipy's interpolate function.
     Input:
         tile | rank 2 array | gridded data, containing voids
@@ -325,55 +388,69 @@ def open_hgt_file(tile_name, pixels_y, pixels_x, tile_folder = './SRTM1/', verbo
 
 #%%
 
-
-def dem_show(matrix,lons,lats,srtm, units_deg= True, title = None):
+def dem_show(matrix, lons_mg, lats_mg, title = None):
     """Visualise a DEM using lat lon as the axis
     Inputs:
         matrix | rank2 array | dem data to be plotted
-        lons | list | lons of bottom left of each tile
-        lats | list | lats of bottom left of each tile
-        srtm1 | 1 or 3 | sets which resolution working with
-         units_deg | boolean | IF ture, axes are in degrees and not pixels.  
-         title | None | or string
+        lons_mg | rank 2 array | The lons of each pixel in the DEM.  Product of np.meshgrid
+        lats_mg | rank 2 array | The lats of each pixel in the DEM.  Products of np.meshgrid.  
+        title | None or string | The figure title.  
     Returns:
         Figure
     History:
         2020/05/11 | MEG | added to project
         2020/05/11 | MEG | Add flag to swtich between degrees and pixels
         2020/06/04 | MEG | Add title option
-    
+        2020/09/22 | MEG | Change lons and lats from list of integers to meshgrids
     """
     
     import matplotlib.pyplot as plt
     import matplotlib.colors as colors
     import numpy as np
     
+    def create_tick_labels_in_deg(tick_labels, degs):
+        """tick_labels are in pixel number, but this function converts them to degrees. 
+        Inputs:
+            tick_labels | rank 1 array | tick lables, such as you would get from ax.get_xticks().  These would be pixel numbers.  e.g. [0, 500, 1000]
+            degs | rank 1 array | lons or lats of each pixel, as you would get from running np.meshgrid.  Should be the same size as the dem, and the lon or
+                                  lat values at whichever pixel number has a tick lable is returned for use as new tick labels.  
+        Returns:
+            tick_labels_degs | list | tick labels in degrees, rounded to 2 dp.  
+        History:
+            2020/09/22 | MEG | Written
+        """
+        import numpy as np
+        
+        tick_labels_degs = []
+        for tick_label in tick_labels.astype(int):
+            if tick_label < 0:
+                tick_labels_degs.append(' ')
+            else:
+                try: 
+                    tick_labels_degs.append(np.round(degs[tick_label], 2))
+                except:
+                    tick_labels_degs.append(' ')
+        return tick_labels_degs
+    
     def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
         new_cmap = colors.LinearSegmentedColormap.from_list(
             'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
             cmap(np.linspace(minval, maxval, n)))
         return new_cmap  
-    
-    cmap = plt.get_cmap('terrain')
-    new_cmap = truncate_colormap(cmap, 0.2, 1)
-    if srtm == 3:
-        samples = 1200                                                          # pixels per deg
-    else:
-        samples = 3601                                                          # pixels per deg, from SRTM docs
 
-    lats2 = np.arange(lats[0], lats[-1] +2 ,1)              # to help with plotting
+    ################## Begin
+    cmap = plt.get_cmap('terrain')                                                              # get a colourmap
+    new_cmap = truncate_colormap(cmap, 0.2, 1)                                                  # remove the blues at the lowest range, so that 0 plots as green.  
 
-    f, ax = plt.subplots()
+    f, ax = plt.subplots()                                                                      # initatite figure.  
     if title is not None:
-        f.suptitle(title)
+        f.suptitle(title)                                                                       # possibly add a title
         f.canvas.set_window_title(title)
     plot_data = ax.imshow(matrix,interpolation='none', aspect=1, vmin = 0, vmax=np.max(matrix), cmap=new_cmap)
-    f.colorbar(plot_data)
-    if units_deg:
-        ax.set_xticks([i for i in range(0,((lons.size)+1)*samples,samples)])                        # tick labels only for lats
-        ax.set_xticklabels(lons) 
-        ax.set_yticks([i for i in range(0,((lats2.size))*samples,samples)])                         # tick labels only for lats
-        ax.set_yticklabels(lats2[::-1]) 
+    f.colorbar(plot_data)                                                                        # add a colour bar.  
+    ax.set_xticklabels(create_tick_labels_in_deg(ax.get_xticks(), lons_mg[-1,:]))                   # set the x tick labels to lons
+    ax.set_yticklabels(create_tick_labels_in_deg(ax.get_yticks(), lats_mg[::-1,0]))                 # and the y to lats.  Note reverse as matrix notation is from top left but lats start from bottom left.  
+
 
 #%%
 
@@ -475,6 +552,125 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
         print('Done!')
     
     return water_mask
+#%%
+
+def ll2xy(bottom_left_ll, pix2deg, points_ll):
+    """    
+    Input:
+        bottom_left_ll | 1x2 np.array | lon lat of bottom left pixel of xy space
+        deg2pix | int | number of pixels in 1 deg (e.g. 1201 for SRTM3)
+        points_ll  | nx2   np.array | n >= 1 for it to work (ie no 1d arrays, must be at least 1x2).  lons in column 1, lats in column 2
+    Output:
+        points_xy | nx2 | (x y) in pixels from lower left corner as intergers 
+                                Careful, as matrix indices are from top left forner 
+        
+    xy space has to be orientated so that north is vertical (ie angles are not supported)
+    
+    2016/12/14 | MEG | written
+    2020/08/06 | MEG | Change so that ll is lonlat.  
+
+    """
+    import numpy as np
+    
+    n_data, dims = points_ll.shape
+    points_diff = points_ll - bottom_left_ll              # difference in degrees from bottom left 
+    points_xy = points_diff * pix2deg
+    #points_xy = np.roll(points_diff_pix, 1, 1)          # lat lon is yx, switch to xy
+    points_xy = points_xy.astype(int)                   # pixels must be integers 
+    return points_xy                      
+
+    
+
+#%% Bulk SRTM dem create
+
+# this needs to be rewritten to take a python inputs.  e.g. a dict.  
+def create_batch_dems(volcano_csv_file, srtm_tiles_folder, void_fill = True, width_km = 20, water_mask_resolution = 'i', download = False):
+    """ A function to create a DEM for each of the Smithsonians subaerial volcanoes.  
+    
+    Inputs:
+        volcano_csv_file | string | path to csv file containing name and lat lon of each volcano in the Smithsonian database
+        srtm_tiles_folder | string | path to folder where SRTM3 tiles are stored.  
+
+        void_fill | boolean | if True, voids in the SRTM data are filled.  Very slow.  
+        width | int | DEM width in km, default is 20.  
+        water_mask_resolution |  c (crude), l (low), i (intermediate), h (high), f (full) .  More detailed = significantly slower.  
+        
+    Returns:
+        volcanoes | list of dicts | each volcano is an entry in the list, and consists of a ditionary of name, lonlat, the dem (with water mask) and the lon lat extent of the dem.  
+        
+    History:
+        2020/08/?? | MEG | Written
+        2020/08/11 | MEG | add return of lon lat extent to each volcano dict, and write docs.  
+    
+    """
+    #### begin imports/definitions
+    pixs2deg = 1201
+   
+    
+
+        
+   
+    
+    #### Begin function
+    volcanoes_name_ll = open_volcano_csv_file(volcano_csv_file)                                                                          # open the CSV from the Smithsonian
+    volcanoes = []                                                                          
+    for volcano_name_ll in volcanoes_name_ll[0:10]:
+        try:
+            volcano = create_volcano_dem(volcano_name_ll, srtm_tiles_folder, void_fill, width_km, water_mask_resolution, download = download)         # create a dem etc. for one volcano
+            #import ipdb; ipdb.set_trace()
+            volcanoes.append(volcano)
+        except:
+            pass  
+    return volcanoes
 
 
-
+def SRTM_dem_make_and_crop(lon_lat, width_km, srtm_tiles_folder, void_fill = True, water_mask_resolution = 'i', download = False):
+    """ 
+    lets rewrite this to take west ast south north as arguments.  
+    
+    SRTM_dem_make is designed for making DEMS that are larger than a single 1' by 1' tile.  This is as water masking is performed on 
+    a tile by tile basis, which avoids a very slow step of masking the water in the whole DEM.  However, if the DEM to be made is smaller 
+    than a 1'x1' tile, it is much quicker to mask water after the DEM has been made (note that it could span several tiles).  This 
+    function is designed for these cases.  
+    
+    Given a list that contains a ditionary about each volcano containing its name and lonlat,
+    create a dem for there and add to the dictionary.  
+    
+    Inputs:
+        lon_lat | tuple | longitude and latitude of centre of DEM
+        width_km | int | Dems are square with side of this length, in km.  
+        srtm_tiles_folder | string | path to folder where SRTM3 tiles can be stored locally.  
+        void_fill | boolean | Fill the odd void in the DEMs.  Slow!
+        water_mask_resolution | string | Resolution of vector coastlines: c l i h f   (ie coarse down to fine)
+        download | boolean | If allowed to download tiles.  If all available tiles are stored locally, setting this to False will speed up the function.  
+    Returns:
+        volcano | dict | updates to now also contain 'dem'
+        
+    History:
+        2020/08/?? | MEG | Written
+        
+    """
+    import numpy as np
+    import numpy.ma as ma
+    from dem_tools_lib import SRTM_dem_make, water_pixel_masker, fill_gridata_voids
+    from auxiliary_functions import crop_matrix_with_ll
+        
+    width_deg = width_km / 111                                                      # convert from km to degrees
+    print(f"Creating a DEM for {volcano['name']}")    
+    lon_e = int(np.ceil(lon_lat[0] + width_deg/2))                        # get the east west north south limits of the dem
+    lon_w = int(np.floor(lonlat[0] - width_deg/2))        
+    lat_n = int(np.ceil(volcano['lonlat'][1] + width_deg/2))
+    lat_s = int(np.floor(volcano['lonlat'][1] - width_deg/2))
+    
+    dem, lons, lats = SRTM_dem_make(lon_w, lon_e, lat_s, lat_n, water_mask_resolution = None,
+                                    SRTM3_tiles_folder = srtm_tiles_folder, void_fill = False, download = download)                                  # make a large dem, but don't mask water bodies or void fill.  (because it's wasterful to do at a large size)
+    dem_crop, ll_extent_crop = crop_matrix_with_ll(dem, (lons[0], lats[0]), pixs2deg, volcano['lonlat'], width_km)              # crop the dem, ll_extent_crop is [(lower left lon lat),(upper right lon lat)]
+    if void_fill:
+        dem_crop = fill_gridata_voids(dem_crop)                                                                                 # fill voids at the cropped scale.  
+    water_mask =  water_pixel_masker(dem_crop, ll_extent_crop[0], ll_extent_crop[1], water_mask_resolution, verbose = True)     # mask the water bodes in the cropped dem
+    volcano['dem'] = ma.array(dem_crop, mask = water_mask)                                                                      # record to dictionary.  
+    volcano['ll_extent'] = ll_extent_crop                                                                                       # also record the lonlat of the lower left and upper right corners of the dem
+    return volcano
+     
+    
+    
