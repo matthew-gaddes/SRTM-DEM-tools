@@ -5,10 +5,6 @@ Created on Mon May 11 10:12:23 2020
 @author: User
 """
 
-import sys
-print('Temporary import of matrix_show for debugging.  ')
-sys.path.append('/home/matthew/university_work/python_stuff/python_scripts/')
-from small_plot_functions import matrix_show
 
 
 from dem_tools_lib import SRTM_dem_make, SRTM_dem_make_batch, dem_show, water_pixel_masker
@@ -70,21 +66,3 @@ for volc_n, volcano in enumerate(volcano_dems2):                                
 
 #%%
 
-
-
-
-
-# Lolobau,-4.92,151.158
-# Kuwae,-16.829,168.536
-# Krakatau,-6.102,105.423
-# Batur,-8.242,115.375
-# Banda Api,-4.523,129.881
-# Taal,14.002,120.993
-# Kikai,30.789,130.308
-# Aira,31.593,130.657
-# Asosan,32.884,131.104
-# Naruko,38.729,140.734
-# Towada,40.51,140.88
-# Nishinoshima,27.247,140.874
-# Ioto,24.751,141.289
-# Shikotsu,42.688,141.38
