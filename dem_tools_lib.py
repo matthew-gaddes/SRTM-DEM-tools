@@ -203,18 +203,80 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
                                                                                                                               # Nb matrix notation starts from the top left, so y has conversions from xy coordinate of pixel (which is from lower left)
 
     else:        
-        print("Masking the water bodies in the entire DEM (as its area was determine to be below 1 tile)... ", end = '')
-        dem = dem[dem.shape[0]-ur_pixels[0][1] : dem.shape[0]-ll_pixels[0][1] , ll_pixels[0][0] : ur_pixels[0][0] ]           # crop the DEM, which is still an array.  
-        dem_mask = water_pixel_masker(dem, (west, south), (east, north), water_mask_resolution, 
-                                                   pixs_per_deg = pixs2deg, verbose = False)                                  # make the water mask for the entire DEM.         
-        dem = ma.array(dem, mask = dem_mask)                                                                                # convert the DEM from an array to a masked array.
-        print("Done!")
+        if  water_mask_resolution is not None:                                                                                    # check that a water mask is required
+            print("Masking the water bodies in the entire DEM (as its area was determined to be below 1 tile)... ", end = '')
+            dem = dem[dem.shape[0]-ur_pixels[0][1] : dem.shape[0]-ll_pixels[0][1] , ll_pixels[0][0] : ur_pixels[0][0] ]           # crop the DEM, which is still an array.  
+            dem_mask = water_pixel_masker(dem, (west, south), (east, north), water_mask_resolution, 
+                                                       pixs_per_deg = pixs2deg, verbose = False)                                  # make the water mask for the entire DEM.         
+            dem = ma.array(dem, mask = dem_mask)                                                                                  # convert the DEM from an array to a masked array.
+            print("Done!")
+        else:
+            pass
         
     # 6: make long and lats for each pixel in the DEM
     lons_mg, lats_mg = np.meshgrid(np.linspace(west, east-(1/pixs2deg), dem.shape[1]), np.linspace(south, north-(1/pixs2deg), dem.shape[0]))        # lons and lats are for the lower left corner of eahc pixel, so we stop (east and north)
                                                                                                                                                     # the size of 1 pixel before the edge of the DEM
     return dem, lons_mg, lats_mg
   
+#%%
+
+def SRTM_dem_make_batch(list_dems,  SRTM1_or3 = 'SRTM3', water_mask_resolution = 'None',
+                        SRTM1_tiles_folder = './SRTM1/', SRTM3_tiles_folder = './SRTM3/',
+                        ed_username = None, ed_password = None, download = True, void_fill = False):
+    """ Create multiple DEMS in one go.  
+    Inputs:
+        list_dems | list of dicts | each dem is an item in the list and can be described as either:
+                                    1) 'centre', a lon lat tuple and 'side_length', a tuple of the x and y side lengths in km.  
+                                    2) 'west', 'east', 'south' 'north' bounding edges, in degrees.  
+        For all other args, see the doc for SRTM_dem_make
+    Returns:
+        list_dems | lis of dicts | Now also contains 'dem', 'lats' and 'lons' for each DEM.  Lats and lons are coordinates of the lower left corner of every pixel.  
+    History:
+        2020/09/23 | MEG | Written
+        
+    """
+    import numpy as np
+    import geopy
+    from geopy.distance import geodesic
+    
+    n_dems = len(list_dems)                                                                                             # get the total number of DEMs to make
+    for n_dem, list_dem in enumerate(list_dems):                                                                                      # loop through each DEM to make it.  
+        print(f"Starting DEM {n_dem} of {n_dems}.  ")    
+        dkeys = list_dem.keys()                                                                                     # get the keys that describe the DEM we are currently working on.  
+        try:                                                                                                        # the entire process is contained in a try statement so that the function can continue if it fails to make the DEM for any reason
+            if ('centre' in dkeys) and ('side_length' in dkeys):                                                    # DEMs are described in one of two ways - either a centre and side length
+                origin = geopy.Point(list_dem['centre'][1], list_dem['centre'][0])                                  # geopy uses lat then lon notation, here for the centre of the DEM
+                west = geodesic(kilometers=(list_dem['side_length'][0])/2).destination(origin, 270)[1]                  # 
+                east = geodesic(kilometers=(list_dem['side_length'][0])/2).destination(origin, 90)[1]                  # 
+                south = geodesic(kilometers=(list_dem['side_length'][1])/2).destination(origin, 180)[0]                 # 
+                north = geodesic(kilometers=(list_dem['side_length'][1])/2).destination(origin, 000)[0]                 # 
+                
+    
+                
+            elif ('west' in dkeys) and ('east' in dkeys) and ('south' in dkeys) and ('north' in dkeys):                 # or in terms of bounds (edges)
+                west = list_dem['west']                                                                                 # get edges of DEM
+                east = list_dem['east']
+                south = list_dem['south']
+                north = list_dem['north']
+    
+            else:
+                print(f"Failed to create DEM {n_dem} due to an error in the the keys describing it (either centre and side length, or bouding box) "
+                      "but continuing to the next DEM.  ")
+    
+            dem, lons, lats =  SRTM_dem_make(west, east, south, north,
+                                 SRTM1_or3, water_mask_resolution, SRTM1_tiles_folder, SRTM3_tiles_folder, 
+                                 ed_username, ed_password, download, void_fill)                                         # make the DEM, using the edges we calculated in one of two ways.  
+            list_dem['dem'] = dem                                                                                       # and write the products to the dictionary.  
+            list_dem['lons'] = lons                                                                                     # cont'd
+            list_dem['lats'] = lats                                                                                     # cont'd
+                
+        except:
+            print(f'Failed to create DEM {n_dem} but continuing to the next DEM.  ')                                                                                    # print warning message if the try statement fails.  
+                
+    return list_dems
+
+  
+    
 #%% should this be rewritten 
 
 def get_tile_edges(west, east, south, north):

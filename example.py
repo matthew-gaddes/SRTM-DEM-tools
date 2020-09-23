@@ -11,11 +11,10 @@ sys.path.append('/home/matthew/university_work/python_stuff/python_scripts/')
 from small_plot_functions import matrix_show
 
 
-from dem_tools_lib import SRTM_dem_make, dem_show, water_pixel_masker
+from dem_tools_lib import SRTM_dem_make, SRTM_dem_make_batch, dem_show, water_pixel_masker
 import numpy.ma as ma                                                                 # used for DEMS and water masks 
 
 
-#%%
 
 
 #%% Make and show a SRTM3 DEM
@@ -43,35 +42,38 @@ dem_show(dem,lons,lats, title = 'SRTM1 DEM')                                    
 dem2, lons2, lats2 =  SRTM_dem_make(11, 13, 41, 43, SRTM1_or3 = 'SRTM3', SRTM3_tiles_folder = './SRTM3/',
                                   water_mask_resolution = None, download = True)                                    # make the dem
 
-standalone_mask =  water_pixel_masker(dem2, (lons2[0], lats2[0]), (lons2[-1], lats2[-1]), 'h', verbose = True)
+standalone_mask =  water_pixel_masker(dem2, (lons2[0,0], lats2[0,0]), (lons2[-1,-1], lats2[-1, -1]), 'h', verbose = True)
 
-dem_show(ma.array(dem2, mask = standalone_mask),lons,lats,srtm = 3, units_deg = True, title = 'SRTM3 DEM - standalone mask')                                  # plot the DEM
+dem_show(ma.array(dem2, mask = standalone_mask), lons, lats, title = 'SRTM3 DEM - standalone mask')                                  # plot the DEM
 
 
-#%% The limits need not be integers
+#%% The limits need not be integers, and it will automatically make the water mask in a faster way for small dems:
 
 
 dem, lons, lats =  SRTM_dem_make(-5.1, -4.4, 55.5, 56.1, SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
-                                  water_mask_resolution = 'i', void_fill = False)                                    # make the dem
+                                  water_mask_resolution = 'f', void_fill = False)                                    # make the dem
 
 dem_show(dem, lons, lats, title = 'SRTM3 DEM')                                              # plot the DEM
 
 
-#%% And it will automatically make the water mask in a faster way for small dems:
-    
 
-dem, lons, lats =  SRTM_dem_make(-4.97, -4.78, 55.87, 55.96, SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
-                                  water_mask_resolution = 'i', void_fill = False)                                    # make the dem
+#%% DEMs can also be made in batches by creating a list of dictionaries.  
 
-dem_show(dem, lons, lats, title = 'SRTM3 DEM')                                              # plot the DEM
+volcano_dems = [{'name' : 'Vulsini',       'centre' : (11.93, 42.6),    'side_length' : (20,20)},
+                {'name' : 'Campi Flegrei', 'centre' : (14.139, 40.827), 'side_length' : (30,20)},
+                {'name' : 'Etna', 'west' : 14.75, 'east' : 15.5, 'south'  : 37.4, 'north' : 38.0}]
+
+volcano_dems2 = SRTM_dem_make_batch(volcano_dems, water_mask_resolution = 'f')                                  # make the DEMS
+
+for volc_n, volcano in enumerate(volcano_dems2):                                                                                   # loop through to display them
+    dem_show(volcano['dem'],volcano['lons'], volcano['lats'], title = f"DEM # {volc_n}: {volcano['name']}")
+
+#%%
 
 
-#%% DEMs can also be made 
 
-# Vulsini,42.6,11.93
-# Campi Flegrei,40.827,14.139
-# Tofua,-19.75,-175.07
-# Witori,-5.576,150.516
+
+
 # Lolobau,-4.92,151.158
 # Kuwae,-16.829,168.536
 # Krakatau,-6.102,105.423

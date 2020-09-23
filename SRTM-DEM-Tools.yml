@@ -5,12 +5,14 @@ channels:
 
 dependencies:
   - python=3.7.1
-  - matplotlib=3.0                  # Newer version can create issues with basemap
+  - matplotlib=3.0.1
+  - matplotlib-base=3.2.2                 # needed to work with basemap (3.3 doesn't seem to due to dedent function)
   - numpy
   - ipdb
   - scikit-learn
   - spyder
   - basemap-data-hires
+  - geopy
   - pip
   - pip:
     - wget
