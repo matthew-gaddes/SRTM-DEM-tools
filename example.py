@@ -15,7 +15,8 @@ import numpy.ma as ma                                                           
 
 #%% Make and show a SRTM3 DEM
 
-dem, lons, lats =  SRTM_dem_make(-4, -1, 53, 55, SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
+dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
+                                  SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
                                   water_mask_resolution = 'i', void_fill = False)                                    # make the dem
 
 dem_show(dem,lons,lats,title = 'SRTM3 DEM')                                              # plot the DEM
@@ -26,8 +27,9 @@ ed_username = input(f'Please enter your USGS Earthdata username:  ')
 ed_password = input(f'Please enter your USGS Earthdata password (NB characters will be visible!   ):  ')
 
 
-dem, lons, lats =  SRTM_dem_make(-3, -1, 53, 55, SRTM1_or3 = 'SRTM1', SRTM1_tiles_folder = './SRTM1/',
-                                    water_mask_resolution = 'i', ed_username = ed_username, ed_password = ed_password)
+dem, lons, lats =  SRTM_dem_make({'west':-3, 'east':-1, 'south':53, 'north':55},
+                                  SRTM1_or3 = 'SRTM1', SRTM1_tiles_folder = './SRTM1/',
+                                  water_mask_resolution = 'i', ed_username = ed_username, ed_password = ed_password)
 
 
 dem_show(dem,lons,lats, title = 'SRTM1 DEM')                                                                   # plot the DEM
@@ -35,8 +37,9 @@ dem_show(dem,lons,lats, title = 'SRTM1 DEM')                                    
 
 #%% Or make a DEM, and mask the water in a separate step.   
 
-dem2, lons2, lats2 =  SRTM_dem_make(11, 13, 41, 43, SRTM1_or3 = 'SRTM3', SRTM3_tiles_folder = './SRTM3/',
-                                  water_mask_resolution = None, download = True)                                    # make the dem
+dem2, lons2, lats2 =  SRTM_dem_make({'west':11, 'east':13, 'south':41, 'north':43},
+                                    SRTM1_or3 = 'SRTM3', SRTM3_tiles_folder = './SRTM3/',
+                                    water_mask_resolution = None, download = True)                                    # make the dem
 
 standalone_mask =  water_pixel_masker(dem2, (lons2[0,0], lats2[0,0]), (lons2[-1,-1], lats2[-1, -1]), 'h', verbose = True)
 
@@ -45,24 +48,29 @@ dem_show(ma.array(dem2, mask = standalone_mask), lons, lats, title = 'SRTM3 DEM 
 
 #%% The limits need not be integers, and it will automatically make the water mask in a faster way for small dems:
 
-
-dem, lons, lats =  SRTM_dem_make(-5.1, -4.4, 55.5, 56.1, SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
+dem, lons, lats =  SRTM_dem_make({'west':-5.1, 'east':-4.4, 'south':55.5, 'north':56.1},
+                                  SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
                                   water_mask_resolution = 'f', void_fill = False)                                    # make the dem
 
 dem_show(dem, lons, lats, title = 'SRTM3 DEM')                                              # plot the DEM
 
+#%% Instead of using the edges of the DEM (west, east etc.), a centre and side length (in m) can be supplied.  
+
+dem, lons, lats =  SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(80e3, 50e3)},
+                                  SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
+                                  water_mask_resolution = 'f', void_fill = False)                                    # make the dem
+
+dem_show(dem, lons, lats, title = 'SRTM3 DEM, centre and side_length style')                                              # plot the DEM
 
 
 #%% DEMs can also be made in batches by creating a list of dictionaries.  
 
-volcano_dems = [{'name' : 'Vulsini',       'centre' : (11.93, 42.6),    'side_length' : (20,20)},
-                {'name' : 'Campi Flegrei', 'centre' : (14.139, 40.827), 'side_length' : (30,20)},
+volcano_dems = [{'name' : 'Vulsini',       'centre' : (11.93, 42.6),    'side_length' : (20e3,20e3)},
+                {'name' : 'Campi Flegrei', 'centre' : (14.139, 40.827), 'side_length' : (30e3,20e3)},
                 {'name' : 'Etna', 'west' : 14.75, 'east' : 15.5, 'south'  : 37.4, 'north' : 38.0}]
 
 volcano_dems2 = SRTM_dem_make_batch(volcano_dems, water_mask_resolution = 'f')                                  # make the DEMS
 
 for volc_n, volcano in enumerate(volcano_dems2):                                                                                   # loop through to display them
-    dem_show(volcano['dem'],volcano['lons'], volcano['lats'], title = f"DEM # {volc_n}: {volcano['name']}")
-
-#%%
+    dem_show(volcano['dem'], volcano['lons'], volcano['lats'], title = f"DEM # {volc_n}: {volcano['name']}")
 

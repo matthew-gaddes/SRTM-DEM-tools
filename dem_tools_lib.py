@@ -8,7 +8,7 @@ Created on Mon May 11 10:08:03 2020
 
 
 
-def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_resolution = None,
+def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = None,
                   SRTM1_tiles_folder = './SRTM1/', SRTM3_tiles_folder = './SRTM3/',
                   ed_username = None, ed_password = None, download = True, void_fill = False):
     """
@@ -17,10 +17,13 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
     This decision is made by determine_masking_stratergy
     
     Inputs:
-        west | -179 -> 180 | west of GMT is negative
-        east | -179 -> 180 | west of GMT is negative
-        south | -90 -> 90  | northern hemishpere is positive
-        north | -90 -> 90  | northern hemishpere is positive
+        dem_loc_size | dict | This can be one of two styles:
+                              1) 'centre', a lon lat tuple and 'side_length', a tuple of the x and y side lengths in m.  
+                              2) 'west', 'east', 'south' 'north' bounding edges, in degrees.  
+                                  west | -179 -> 180 | west of GMT is negative
+                                  east | -179 -> 180 | west of GMT is negative
+                                  south | -90 -> 90  | northern hemishpere is positive
+                                  north | -90 -> 90  | northern hemishpere is positive
         SRTM1_or3 | string | either use SRTM3 (~90m pixels) or SRTM1 (~30m pixels)
         water_mask_resolution | None or string | If not none, the DEM will be returned as a masked array, with water masked.  
                                         Resolution of vector coastlines: c l i h f   (ie coarse down to fine)
@@ -38,11 +41,14 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
         lats_mg | rank 2 array | The lats of each pixel in the DEM.  Products of np.meshgrid.  
     History:
         2020/04/?? | MEG | Much of this was written during Covid-19 lockdown for a project work with Strava file.  
-        2020/09/21 | MEG | Update to handle non-integer extents (ie. teh western edge need no longer be an integer).  WIP
+        2020/09/21 | MEG | Update to handle non-integer extents (ie. teh western edge need no longer be an integer).
+        2020/09/30 | MEG | Change format so that DEMs can be specified as either a centre and side length, or as before as bounds (west, east, south, north)
     """
     #import matplotlib.pyplot as plt
     import numpy as np
     import numpy.ma as ma
+    import geopy
+    from geopy.distance import geodesic
     #import os 
     
     def determine_masking_stratergy(west, east, south, north, area_threshold = 1.0):
@@ -67,8 +73,29 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
         return mask_before_crop
     
 
-    ########### Begin
 
+    ########### Begin
+    null = -32768                                                               # from SRTM documentation   
+    # -2: The DEM location and size can be given in one of two formats.  Unpack each of these to be in the same form
+    dkeys = dem_loc_size.keys()                                                                               # get the keys that describe the DEM we are currently working on.  
+    if ('centre' in dkeys) and ('side_length' in dkeys):                                                      # DEMs are described in one of two ways - either a centre and side length
+        origin = geopy.Point(dem_loc_size['centre'][1], dem_loc_size['centre'][0])                            # geopy uses lat then lon notation, here for the centre of the DEM
+        west = geodesic(meters=(dem_loc_size['side_length'][0])/2).destination(origin, 270)[1]                  # 
+        east = geodesic(meters=(dem_loc_size['side_length'][0])/2).destination(origin, 90)[1]                  # 
+        south = geodesic(meters=(dem_loc_size['side_length'][1])/2).destination(origin, 180)[0]                 # 
+        north = geodesic(meters=(dem_loc_size['side_length'][1])/2).destination(origin, 000)[0]                 # 
+        
+    elif ('west' in dkeys) and ('east' in dkeys) and ('south' in dkeys) and ('north' in dkeys):                 # or in terms of bounds (edges)
+        west = dem_loc_size['west']                                                                             # get edges of DEM
+        east = dem_loc_size['east']
+        south = dem_loc_size['south']
+        north = dem_loc_size['north']
+    else:
+        raise Exception(f"'dem_loc_size' must be a dictionary containing either 'centre' (a lon lat tuple) and 'side_length' (x direciton y direction tuple), or  "
+                        f"'west', 'east', 'south', 'north' (lons and lats as floats).  Exiting...")
+    
+
+    # -1 Check various input arguments
     if west > east:
         raise Exception(f"'west' ({west}) must always be smaller than 'east' ({east}).  If west of Grenwich, values should be negative.  Exiting. ")
     if south > north:
@@ -79,10 +106,8 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
         print(f"{SRTM1_or3} tiles will be used, and water bodies won't be masked.  ")
     else:
         print(f"{SRTM1_or3} tiles will be used, and water bodies will be masked.  ")
+   
 
-    # Things to set
-    null = -32768                                                               # from SRTM documentation   
-    
     # 0: determine resolution and check inputs
     if SRTM1_or3 == 'SRTM3':
         pixs2deg = 1201
@@ -108,7 +133,7 @@ def SRTM_dem_make(west, east, south, north, SRTM1_or3 = 'SRTM3', water_mask_reso
     west_i, east_i, south_i, north_i = get_tile_edges(west, east, south, north)                                                      # edges can be floats.  Get the edges in whole numbers of tiles
     mask_before_crop = determine_masking_stratergy(west, east, south, north, area_threshold = 1.0)                                  # determine when water masking should occur.  
     
-    #import ipdb; ipdb.set_trace()
+
     if (not mask_before_crop) and (water_mask_resolution is not None):
         print(f"The area of the DEM is sufficently low that water masking will be done for the whole DEM, and not for each tile.  ")
     
@@ -226,46 +251,34 @@ def SRTM_dem_make_batch(list_dems,  SRTM1_or3 = 'SRTM3', water_mask_resolution =
     """ Create multiple DEMS in one go.  
     Inputs:
         list_dems | list of dicts | each dem is an item in the list and can be described as either:
-                                    1) 'centre', a lon lat tuple and 'side_length', a tuple of the x and y side lengths in km.  
+                                    1) 'centre', a lon lat tuple and 'side_length', a tuple of the x and y side lengths in m.  
                                     2) 'west', 'east', 'south' 'north' bounding edges, in degrees.  
         For all other args, see the doc for SRTM_dem_make
     Returns:
         list_dems | lis of dicts | Now also contains 'dem', 'lats' and 'lons' for each DEM.  Lats and lons are coordinates of the lower left corner of every pixel.  
     History:
         2020/09/23 | MEG | Written
-        
     """
     import numpy as np
-    import geopy
-    from geopy.distance import geodesic
     
     n_dems = len(list_dems)                                                                                             # get the total number of DEMs to make
+    
     for n_dem, list_dem in enumerate(list_dems):                                                                                      # loop through each DEM to make it.  
-        print(f"Starting DEM {n_dem} of {n_dems}.  ")    
-        dkeys = list_dem.keys()                                                                                     # get the keys that describe the DEM we are currently working on.  
-        try:                                                                                                        # the entire process is contained in a try statement so that the function can continue if it fails to make the DEM for any reason
-            if ('centre' in dkeys) and ('side_length' in dkeys):                                                    # DEMs are described in one of two ways - either a centre and side length
-                origin = geopy.Point(list_dem['centre'][1], list_dem['centre'][0])                                  # geopy uses lat then lon notation, here for the centre of the DEM
-                west = geodesic(kilometers=(list_dem['side_length'][0])/2).destination(origin, 270)[1]                  # 
-                east = geodesic(kilometers=(list_dem['side_length'][0])/2).destination(origin, 90)[1]                  # 
-                south = geodesic(kilometers=(list_dem['side_length'][1])/2).destination(origin, 180)[0]                 # 
-                north = geodesic(kilometers=(list_dem['side_length'][1])/2).destination(origin, 000)[0]                 # 
+        print(f"Starting DEM {n_dem} of {n_dems}.  ")       
+        try:
+            dem_loc_size = {}                                                                       # initiate a dictionary that will describe the DEM location and size.  
+            try:
+                dem_loc_size['centre'] = list_dem['centre']                                         # either as a centre and side length
+                dem_loc_size['side_length'] = list_dem['side_length']
+            except:
+                dem_loc_size['west'] = list_dem['west']                                             # or just as bounds
+                dem_loc_size['east'] = list_dem['east']
+                dem_loc_size['south'] = list_dem['south']
+                dem_loc_size['north'] = list_dem['north']
                 
-    
-                
-            elif ('west' in dkeys) and ('east' in dkeys) and ('south' in dkeys) and ('north' in dkeys):                 # or in terms of bounds (edges)
-                west = list_dem['west']                                                                                 # get edges of DEM
-                east = list_dem['east']
-                south = list_dem['south']
-                north = list_dem['north']
-    
-            else:
-                print(f"Failed to create DEM {n_dem} due to an error in the the keys describing it (either centre and side length, or bouding box) "
-                      "but continuing to the next DEM.  ")
-    
-            dem, lons, lats =  SRTM_dem_make(west, east, south, north,
-                                 SRTM1_or3, water_mask_resolution, SRTM1_tiles_folder, SRTM3_tiles_folder, 
-                                 ed_username, ed_password, download, void_fill)                                         # make the DEM, using the edges we calculated in one of two ways.  
+            dem, lons, lats =  SRTM_dem_make(dem_loc_size,
+                                             SRTM1_or3, water_mask_resolution, SRTM1_tiles_folder, SRTM3_tiles_folder, 
+                                             ed_username, ed_password, download, void_fill)                                         # make the DEM, using either of the two ways the DEM can be described.  
             list_dem['dem'] = dem                                                                                       # and write the products to the dictionary.  
             list_dem['lons'] = lons                                                                                     # cont'd
             list_dem['lats'] = lats                                                                                     # cont'd
@@ -641,98 +654,4 @@ def ll2xy(bottom_left_ll, pix2deg, points_ll):
     points_xy = points_xy.astype(int)                   # pixels must be integers 
     return points_xy                      
 
-    
-
-#%% Bulk SRTM dem create
-
-# this needs to be rewritten to take a python inputs.  e.g. a dict.  
-def create_batch_dems(volcano_csv_file, srtm_tiles_folder, void_fill = True, width_km = 20, water_mask_resolution = 'i', download = False):
-    """ A function to create a DEM for each of the Smithsonians subaerial volcanoes.  
-    
-    Inputs:
-        volcano_csv_file | string | path to csv file containing name and lat lon of each volcano in the Smithsonian database
-        srtm_tiles_folder | string | path to folder where SRTM3 tiles are stored.  
-
-        void_fill | boolean | if True, voids in the SRTM data are filled.  Very slow.  
-        width | int | DEM width in km, default is 20.  
-        water_mask_resolution |  c (crude), l (low), i (intermediate), h (high), f (full) .  More detailed = significantly slower.  
-        
-    Returns:
-        volcanoes | list of dicts | each volcano is an entry in the list, and consists of a ditionary of name, lonlat, the dem (with water mask) and the lon lat extent of the dem.  
-        
-    History:
-        2020/08/?? | MEG | Written
-        2020/08/11 | MEG | add return of lon lat extent to each volcano dict, and write docs.  
-    
-    """
-    #### begin imports/definitions
-    pixs2deg = 1201
    
-    
-
-        
-   
-    
-    #### Begin function
-    volcanoes_name_ll = open_volcano_csv_file(volcano_csv_file)                                                                          # open the CSV from the Smithsonian
-    volcanoes = []                                                                          
-    for volcano_name_ll in volcanoes_name_ll[0:10]:
-        try:
-            volcano = create_volcano_dem(volcano_name_ll, srtm_tiles_folder, void_fill, width_km, water_mask_resolution, download = download)         # create a dem etc. for one volcano
-            #import ipdb; ipdb.set_trace()
-            volcanoes.append(volcano)
-        except:
-            pass  
-    return volcanoes
-
-
-def SRTM_dem_make_and_crop(lon_lat, width_km, srtm_tiles_folder, void_fill = True, water_mask_resolution = 'i', download = False):
-    """ 
-    lets rewrite this to take west ast south north as arguments.  
-    
-    SRTM_dem_make is designed for making DEMS that are larger than a single 1' by 1' tile.  This is as water masking is performed on 
-    a tile by tile basis, which avoids a very slow step of masking the water in the whole DEM.  However, if the DEM to be made is smaller 
-    than a 1'x1' tile, it is much quicker to mask water after the DEM has been made (note that it could span several tiles).  This 
-    function is designed for these cases.  
-    
-    Given a list that contains a ditionary about each volcano containing its name and lonlat,
-    create a dem for there and add to the dictionary.  
-    
-    Inputs:
-        lon_lat | tuple | longitude and latitude of centre of DEM
-        width_km | int | Dems are square with side of this length, in km.  
-        srtm_tiles_folder | string | path to folder where SRTM3 tiles can be stored locally.  
-        void_fill | boolean | Fill the odd void in the DEMs.  Slow!
-        water_mask_resolution | string | Resolution of vector coastlines: c l i h f   (ie coarse down to fine)
-        download | boolean | If allowed to download tiles.  If all available tiles are stored locally, setting this to False will speed up the function.  
-    Returns:
-        volcano | dict | updates to now also contain 'dem'
-        
-    History:
-        2020/08/?? | MEG | Written
-        
-    """
-    import numpy as np
-    import numpy.ma as ma
-    from dem_tools_lib import SRTM_dem_make, water_pixel_masker, fill_gridata_voids
-    from auxiliary_functions import crop_matrix_with_ll
-        
-    width_deg = width_km / 111                                                      # convert from km to degrees
-    print(f"Creating a DEM for {volcano['name']}")    
-    lon_e = int(np.ceil(lon_lat[0] + width_deg/2))                        # get the east west north south limits of the dem
-    lon_w = int(np.floor(lonlat[0] - width_deg/2))        
-    lat_n = int(np.ceil(volcano['lonlat'][1] + width_deg/2))
-    lat_s = int(np.floor(volcano['lonlat'][1] - width_deg/2))
-    
-    dem, lons, lats = SRTM_dem_make(lon_w, lon_e, lat_s, lat_n, water_mask_resolution = None,
-                                    SRTM3_tiles_folder = srtm_tiles_folder, void_fill = False, download = download)                                  # make a large dem, but don't mask water bodies or void fill.  (because it's wasterful to do at a large size)
-    dem_crop, ll_extent_crop = crop_matrix_with_ll(dem, (lons[0], lats[0]), pixs2deg, volcano['lonlat'], width_km)              # crop the dem, ll_extent_crop is [(lower left lon lat),(upper right lon lat)]
-    if void_fill:
-        dem_crop = fill_gridata_voids(dem_crop)                                                                                 # fill voids at the cropped scale.  
-    water_mask =  water_pixel_masker(dem_crop, ll_extent_crop[0], ll_extent_crop[1], water_mask_resolution, verbose = True)     # mask the water bodes in the cropped dem
-    volcano['dem'] = ma.array(dem_crop, mask = water_mask)                                                                      # record to dictionary.  
-    volcano['ll_extent'] = ll_extent_crop                                                                                       # also record the lonlat of the lower left and upper right corners of the dem
-    return volcano
-     
-    
-    
