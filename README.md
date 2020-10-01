@@ -1,14 +1,27 @@
 # SRTM-DEM-tools
-Tools for making and manipulating SRTM1 and SRTM3 Dems.  
+Tools for making and manipulating SRTM1 and SRTM3 DEMs.  
 
 
-<h5>Installation:</h5>
+# Installation
 A suitable python environment can be created using the conda command:<br>
 <code>conda env create --file SRTM-DEM-Tools.yml</code>
 
 <br>
 
-<h5>Examples:</h5>
+# Usage
+DEMs an be described either using using west/east/south/north limits: <br>
+<code> SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55})</code><br>
+
+Or, using a centre location and side length (in metres): <br>
+<code> SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(110e3, 100e3)}, </code><br>
+
+
+There are also other useful functions: <br>
+- water_pixel_masker   | To determine if pixels lie within water bodes.  This is usually called from within SRTM_dem_make.  
+- SRTM_dem_make_batch  | To create several DEMs in one step.  
+- dem_show             | To create simple figures showing the DEMs that have been created.  
+
+# Examples
 
 "example.py" includes several examples, including of an SRTM3 DEM with water bodies masked:
 
