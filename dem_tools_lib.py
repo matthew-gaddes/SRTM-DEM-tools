@@ -43,6 +43,7 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         2020/04/?? | MEG | Much of this was written during Covid-19 lockdown for a project work with Strava file.  
         2020/09/21 | MEG | Update to handle non-integer extents (ie. teh western edge need no longer be an integer).
         2020/09/30 | MEG | Change format so that DEMs can be specified as either a centre and side length, or as before as bounds (west, east, south, north)
+        2020/10/01 | MEG | Fix a bug in the lats_mg that was causing the lowest lats to be on the top row.  
     """
     #import matplotlib.pyplot as plt
     import numpy as np
@@ -241,6 +242,7 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
     # 6: make long and lats for each pixel in the DEM
     lons_mg, lats_mg = np.meshgrid(np.linspace(west, east-(1/pixs2deg), dem.shape[1]), np.linspace(south, north-(1/pixs2deg), dem.shape[0]))        # lons and lats are for the lower left corner of eahc pixel, so we stop (east and north)
                                                                                                                                                     # the size of 1 pixel before the edge of the DEM
+    lats_mg = np.flipud(lats_mg)                                                                                                                    # flip so that lowest lats are at bottom of array                                            
     return dem, lons_mg, lats_mg
   
 #%%
@@ -477,6 +479,7 @@ def dem_show(matrix, lons_mg, lats_mg, title = None):
         2020/05/11 | MEG | Add flag to swtich between degrees and pixels
         2020/06/04 | MEG | Add title option
         2020/09/22 | MEG | Change lons and lats from list of integers to meshgrids
+        2020/10/01 | MEG | Fix a bug in how lats on the tick labels were handled.  
     """
     
     import matplotlib.pyplot as plt
@@ -524,7 +527,7 @@ def dem_show(matrix, lons_mg, lats_mg, title = None):
     plot_data = ax.imshow(matrix,interpolation='none', aspect=1, vmin = 0, vmax=np.max(matrix), cmap=new_cmap)
     f.colorbar(plot_data)                                                                        # add a colour bar.  
     ax.set_xticklabels(create_tick_labels_in_deg(ax.get_xticks(), lons_mg[-1,:]))                   # set the x tick labels to lons
-    ax.set_yticklabels(create_tick_labels_in_deg(ax.get_yticks(), lats_mg[::-1,0]))                 # and the y to lats.  Note reverse as matrix notation is from top left but lats start from bottom left.  
+    ax.set_yticklabels(create_tick_labels_in_deg(ax.get_yticks(), lats_mg[:,0]))                    # and the y to lats.  
 
 
 #%%

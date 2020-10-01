@@ -10,9 +10,6 @@ Created on Mon May 11 10:12:23 2020
 from dem_tools_lib import SRTM_dem_make, SRTM_dem_make_batch, dem_show, water_pixel_masker
 import numpy.ma as ma                                                                 # used for DEMS and water masks 
 
-
-
-
 #%% Make and show a SRTM3 DEM
 
 dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
@@ -20,6 +17,7 @@ dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
                                   water_mask_resolution = 'i', void_fill = False)                                    # make the dem
 
 dem_show(dem,lons,lats,title = 'SRTM3 DEM')                                              # plot the DEM
+
 
 #%% Make and show a SRTM1 DEM
 
