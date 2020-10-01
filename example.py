@@ -56,7 +56,7 @@ dem_show(dem, lons, lats, title = 'SRTM3 DEM')                                  
 
 #%% Instead of using the edges of the DEM (west, east etc.), a centre and side length (in m) can be supplied.  
 
-dem, lons, lats =  SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(80e3, 50e3)},
+dem, lons, lats =  SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(110e3, 100e3)},
                                   SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
                                   water_mask_resolution = 'f', void_fill = False)                                    # make the dem
 
