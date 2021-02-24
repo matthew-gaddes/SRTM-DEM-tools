@@ -63,6 +63,7 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
             mask_before_crop | boolean | True is area of DEM is larger than the area_threshold
         History:
             2020/09/22 | MEG | Written.  
+            2021/02/24 | MEG | Update to use a single function to download either SRTM1 or 3 tiles.  
             
         """
         del_x = east - west
@@ -107,6 +108,9 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         print(f"{SRTM1_or3} tiles will be used, and water bodies won't be masked.  ")
     else:
         print(f"{SRTM1_or3} tiles will be used, and water bodies will be masked.  ")
+        
+    if (ed_username is None) or (ed_password is None):
+        raise Exception('Both an Earthdate username and password must be supplied to download data.  Exiting.  ')
    
 
     # 0: determine resolution and check inputs
@@ -114,10 +118,12 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         pixs2deg = 1201
         SRTM3 = True
         tiles_folder = SRTM3_tiles_folder
+        SRTM_resolution = '3'
     elif SRTM1_or3 == 'SRTM1':
         pixs2deg = 3601
         SRTM3 = False
         tiles_folder = SRTM1_tiles_folder
+        SRTM_resolution = '1'
     else:
         raise Exception(f"'SRTM1_or3' must be eitehr SRTM1 or SRTM3.  Exiting...")
     
@@ -158,22 +164,16 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
             try:
                 tile_elev = open_hgt_file(tile_name, pixs2deg, pixs2deg, tiles_folder)
                 print(' Done!')
-
             except:
                 print(' Failed.  ')
                 if download == True:
                     print(f"{tile_name} : Trying to download it...  ", end = "" )
-                    if SRTM3:
-                        try:
-                            download_success = srtm3_tile_downloader(tile_name, tiles_folder)
-                        except:
-                            download_success = False
-                    else:
-                        try:
-                            srtm1_tile_downloader(tile_name, ed_username, ed_password, tiles_folder)          # download tile
-                            download_success = True
-                        except:
-                            download_success = False
+                    try:
+                        srtm1or3_tile_downloader(tile_name, ed_username, ed_password, SRTM_resolution, hgt_path = tiles_folder)
+                        download_success = True
+                    except:
+                        download_success = False
+
                     if download_success:
                         print( 'Done!')
                         print(f"{tile_name} : Opening the .hgt file", end = "" )
@@ -282,8 +282,8 @@ def SRTM_dem_make_batch(list_dems,  SRTM1_or3 = 'SRTM3', water_mask_resolution =
                                              SRTM1_or3, water_mask_resolution, SRTM1_tiles_folder, SRTM3_tiles_folder, 
                                              ed_username, ed_password, download, void_fill)                                         # make the DEM, using either of the two ways the DEM can be described.  
             list_dem['dem'] = dem                                                                                       # and write the products to the dictionary.  
-            list_dem['lons'] = lons                                                                                     # cont'd
-            list_dem['lats'] = lats                                                                                     # cont'd
+            list_dem['lons_mg'] = lons                                                                                     # cont'd
+            list_dem['lats_mg'] = lats                                                                                     # cont'd
                 
         except:
             print(f'Failed to create DEM {n_dem} but continuing to the next DEM.  ')                                                                                    # print warning message if the try statement fails.  
@@ -315,98 +315,67 @@ def get_tile_edges(west, east, south, north):
 
 #%%
 
-def srtm1_tile_downloader(tile_name, ed_username, ed_password, hgt_path = './SRTM1_tiles', verbose = False):
-        """Given the name of an SRTM1 tile, download it, unzip it.    
-        An Earthdata account is needed to succesfully download tiles.  
-        Inputs:
-            tile_name | string | e.g. N51W004
-            ed_username | string | Earthdata username.  To apply: https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/earthdata-login
-            ed_password | string | Earthdata password
-            hgt_path | string | path to folder of SRTM1 tiles
-        Returns:
-            .hgt file
-        History:
-            2020/05/10 | MEG | Written
-            
-        """
-        import requests
-        import zipfile
-        import os
-        
-        tile_location = 'http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/'               # Where USGS keeps SRTM1 tiles
-        
-        # 0: download the zip file
-        if verbose:
-            print(f"{tile_name}: Downloading the zip file...", end = '')
-        zip_filename = f"./{tile_name}.hgt.zip"                                                     # name to save downloaded file to
-        with requests.Session() as session:
-            session.auth = (ed_username, ed_password)                                               # login steps
-            r1 = session.request('get', f"{tile_location}{tile_name}.SRTMGL1.hgt.zip")  
-            r = session.get(r1.url, auth=(ed_username, ed_password))                                      # download file
-            if r.ok:
-                with open(zip_filename, 'wb') as fd:                                                # write the .hgt.zip file
-                    for chunk in r.iter_content(chunk_size=1024*1024):
-                        fd.write(chunk)
-            else:
-                raise Exception('Download failed.  ')
-        if verbose:
-            print('Done!')
-                        
-        # 1: unzip to get a hgt, and then delete zip file
-        if verbose:
-            print(f"{tile_name}: Unzipping...", end = '')                                               # unzip the file
-        with zipfile.ZipFile(zip_filename ,"r") as zip_ref:                                
-            zip_ref.extractall(hgt_path)
-        os.remove(zip_filename)                                                                     # remove the redundant zip file
-        if verbose:
-            print("Done!")
-  
-#%%
-
-def srtm3_tile_downloader(tile_name, hgt_path = './SRTM3_tiles/', verbose = False):
-    """Given the name of an SRTM3 tile, download it, unzip it.        
+def srtm1or3_tile_downloader(tile_name, ed_username, ed_password, SRTM_resolution = '3', hgt_path = None, verbose = False):
+    """Given the name of an SRTM1 tile, download it, unzip it.    
+    An Earthdata account is needed to succesfully download tiles.  
     Inputs:
         tile_name | string | e.g. N51W004
+        ed_username | string | Earthdata username.  To apply: https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/earthdata-login
+        ed_password | string | Earthdata password
         hgt_path | string | path to folder of SRTM1 tiles
     Returns:
         .hgt file
     History:
-        2020/05/11 | MEG | Written
+        2020/05/10 | MEG | Written
+        2021/02/24 | MEG | Update to handle both SRTM1 and 3 tiles.  
+        
     """
-    import wget
+    import requests
     import zipfile
     import os
     
-    path_download = 'https://dds.cr.usgs.gov/srtm/version2_1/SRTM3/'            # other locations, but easiest to http from (except for the region thing)
-    regions = ['Africa', 'Australia', 'Eurasia', 'Islands', 'North_America', 'South_America']
+    SRTM1_tile_location = 'http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/'               # Where USGS keeps SRTM1 tiles
+    SRTM3_tile_location = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL3.003/2000.02.11/'                # ditto
     
+    # 0:  Set strings according to if we're using SRTM 1 or 3 data
+    if SRTM_resolution == '3':
+        tile_location = SRTM3_tile_location
+        tile_extension = 'SRTMGL3.hgt.zip'
+        if hgt_path is None:
+            hgt_path = './SRTM3_tiles/'
+    elif SRTM_resolution == '1':
+        tile_location = SRTM1_tile_location
+        tile_extension = 'SRTMGL1.hgt.zip'
+        if hgt_path is None:
+            hgt_path = './SRTM1_tiles/'
+    else:
+        raise Exception("'SRTM_resolution' must be itehr '3' or '1' (i.e. strings, and not numbers).  Exiting. ")
     
-    # 0: Download the .hgt.zip
+    # 1: download the zip file
     if verbose:
         print(f"{tile_name}: Downloading the zip file...", end = '')
-    download_success = False                                                                            # initialise
-    for region in regions:                                                                             # Loop through all the SRTM regions (as from a lat and lon it's hard to know which folder they're in)
-        if download_success is False:
-            try:
-                #import ipdb; ipdb.set_trace()
-                filename = wget.download(f'{path_download}{region}/{tile_name}.hgt.zip', bar = False)                                                    # srtm data is in different folders for each region.  Try all alphabetically until find the ones it's in
-                download_success = True
-            except:
-                download_success = False
+    zip_filename = f"./{tile_name}.hgt.zip"                                                     # name to save downloaded file to
+    with requests.Session() as session:
+        session.auth = (ed_username, ed_password)                                               # login steps
+        r1 = session.request('get', f"{tile_location}{tile_name}.{tile_extension}")  
+        r = session.get(r1.url, auth=(ed_username, ed_password))                                      # download file
+        if r.ok:
+            with open(zip_filename, 'wb') as fd:                                                # write the .hgt.zip file
+                for chunk in r.iter_content(chunk_size=1024*1024):
+                    fd.write(chunk)
+        else:
+            raise Exception('Download failed.  ')
     if verbose:
         print('Done!')
-        
-    # 1: unzip to get a hgt, and then delete zip file (if did download it)
-    if download_success:
-        if verbose:
-            print(f"{tile_name}: Unzipping...", end = '')                                               # unzip the file
-        with zipfile.ZipFile(f'./{tile_name}.hgt.zip',"r") as zip_ref:                                
-            zip_ref.extractall(hgt_path)                                                            # unzip into folder of hgt files
-        os.remove(f'./{tile_name}.hgt.zip')                                                 # remove the redundant zip file
-        if verbose:
-            print("Done!")
-        
-    return download_success    
+                    
+    # 2: unzip to get a hgt, and then delete zip file
+    if verbose:
+        print(f"{tile_name}: Unzipping...", end = '')                                               # unzip the file
+    with zipfile.ZipFile(zip_filename ,"r") as zip_ref:                                
+        zip_ref.extractall(hgt_path)
+    os.remove(zip_filename)                                                                     # remove the redundant zip file
+    if verbose:
+        print("Done!")
   
    
 #%%
@@ -581,7 +550,16 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     
     if verbose:
         print('Creating a mask of pixels that lie in water (sea and lakes)... ', end = '')
-                
+    
+    # 0: check inputs
+    if lon_lat_ll[0] > lon_lat_ur[0]:
+        raise Exception(f"The western (left) edge ({lon_lat_ll[0]}) appears to be east of the "
+                        f"eastern (right) edge ({lon_lat_ur[0]}).  Exiting.  ")
+        
+    if lon_lat_ll[1] > lon_lat_ur[1]:
+        raise Exception(f"The southern (lower) edge ({lon_lat_ll[1]}) appears to be north of the "
+                        f"northern (upper) edge ({lon_lat_ur[1]}).  Exiting.  ")
+            
     # 1: deal with sizes of various things and make a grid of points
     ny = dem.shape[0]                                                                                           # number of pixels vetically
     nx = dem.shape[1]                                                                                           # and horizontally            
