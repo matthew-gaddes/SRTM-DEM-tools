@@ -15,22 +15,22 @@ ed_password = input(f'Please enter your USGS Earthdata password (NB characters w
 
 #%% Make and show a SRTM3 DEM
 
-# dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
-#                                   SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
-#                                   water_mask_resolution = 'i', void_fill = False,                                    # make the dem
-#                                   ed_username = ed_username, ed_password = ed_password)
+dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
+                                  SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = './SRTM3/',
+                                  water_mask_resolution = 'i', void_fill = False,                                    # make the dem
+                                  ed_username = ed_username, ed_password = ed_password)
 
-# dem_show(dem,lons,lats,title = '1: SRTM3 DEM')                                              # plot the DEM
+dem_show(dem,lons,lats,title = '1: SRTM3 DEM')                                              # plot the DEM
 
     
-# #%% Make and show a SRTM1 DEM
+#%% Make and show a SRTM1 DEM
 
-# dem, lons, lats =  SRTM_dem_make({'west':-3, 'east':-1, 'south':53, 'north':55},
-#                                   SRTM1_or3 = 'SRTM1', SRTM1_tiles_folder = './SRTM1/',
-#                                   water_mask_resolution = 'i', ed_username = ed_username, ed_password = ed_password)
+dem, lons, lats =  SRTM_dem_make({'west':-3, 'east':-1, 'south':53, 'north':55},
+                                  SRTM1_or3 = 'SRTM1', SRTM1_tiles_folder = './SRTM1/',
+                                  water_mask_resolution = 'i', ed_username = ed_username, ed_password = ed_password)
 
 
-# dem_show(dem,lons,lats, title = '2: SRTM1 DEM')                                                                   # plot the DEM
+dem_show(dem,lons,lats, title = '2: SRTM1 DEM')                                                                   # plot the DEM
 
 
 #%% Or make a DEM, and mask the water in a separate step.   

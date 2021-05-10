@@ -30,7 +30,7 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         SRTM1_tiles_folder | string | folder where SRTM1 .hgt file are kept
         SRTM3_tiles_folder | string | folder where SRTM3 .hgt file are kept
         
-        ed_username | string | Earthdata username, needed for SRMT1 only.  To apply: https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/earthdata-login
+        ed_username | string | Earthdata username, to apply: https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/earthdata-login
         ed_password | string | Earthdata password
         download | boolean | if False, function will not try to download DEM tiles.  Good if have a large number of tile already downloaded.  
         void_fill | boolean | If true, will try to linearly interpolate across voids in data.  
@@ -541,9 +541,12 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     
     if platform.system() == 'Windows':                                                                              # check if windows as can be tricky with basemap
         try:
-            print('Trying the Windows fix to get basemap to keep working...', end = '')
-            os.environ['PROJ_LIB'] = r'C:\Users\User\anaconda3\envs\strava_sd_keras\Library\share'                  # https://stackoverflow.com/questions/52911232/basemap-library-using-anaconda-jupyter-notebooks-keyerror-proj-lib/54087410#54087410
-            print(" Done.  ")
+            print("Basemap is coming to the end of its life and support is now difficult with windows.  "
+                  "The os.environ argument PROJ_LIB often has to be set manually, but this is usually straightforward"
+                  " as most of it is just the path to your anaconda environment.  Trying to set it now, but if "
+                  " if this fails, it is most likely that you'll have to edit /user/ to your username in the water_pixel_masker fucntion... " , end = '')
+            os.environ['PROJ_LIB'] = r'C:\Users\User\anaconda3\envs\SRTM-DEM-tools\Library\share'                  # https://stackoverflow.com/questions/52911232/basemap-library-using-anaconda-jupyter-notebooks-keyerror-proj-lib/54087410#54087410
+            print(" Success!  ")
         except:
             print(f'Continuining anyway - look out for the PROJ_LIB error')
     from mpl_toolkits.basemap import Basemap
