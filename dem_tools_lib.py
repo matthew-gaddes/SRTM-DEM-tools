@@ -75,7 +75,6 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         return mask_before_crop
     
 
-
     ########### Begin
     null = -32768                                                               # from SRTM documentation   
     # -2: The DEM location and size can be given in one of two formats.  Unpack each of these to be in the same form
@@ -110,7 +109,7 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         print(f"{SRTM1_or3} tiles will be used, and water bodies will be masked.  ")
         
     if (ed_username is None) or (ed_password is None):
-        raise Exception('Both an Earthdate username and password must be supplied to download data.  Exiting.  ')
+        print('Both an Earthdata (USGS) username and password must be supplied to download data.  Continuing as the tiles may be stored locally.  ')
    
 
     # 0: determine resolution and check inputs
