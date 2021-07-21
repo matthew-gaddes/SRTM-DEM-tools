@@ -57,6 +57,8 @@ dem, lons, lats =  SRTM_dem_make({'west':-5.1, 'east':-4.4, 'south':55.5, 'north
 
 dem_show(dem, lons, lats, title = '4: SRTM3 DEM')                                              # plot the DEM
 
+
+
 #%% Instead of using the edges of the DEM (west, east etc.), a centre and side length (in m) can be supplied.  
 
 dem, lons, lats =  SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(110e3, 100e3)},

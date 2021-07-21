@@ -137,11 +137,10 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         
     
     west_i, east_i, south_i, north_i = get_tile_edges(west, east, south, north)                                                      # edges can be floats.  Get the edges in whole numbers of tiles
-    mask_before_crop = determine_masking_stratergy(west, east, south, north, area_threshold = 1.0)                                  # determine when water masking should occur.  
+    mask_before_crop = determine_masking_stratergy(west, east, south, north, area_threshold = 1.0)                                  # determine when water masking should occur.  If True, making done to each tile.  
     
-
-    if (not mask_before_crop) and (water_mask_resolution is not None):
-        print(f"The area of the DEM is sufficently low that water masking will be done for the whole DEM, and not for each tile.  ")
+    if not mask_before_crop:
+        print(f"The area of the DEM is sufficently low that water masking and void filling (if requested) will be done for the whole DEM, and not for each tile.  ")
     
     # 1: Initiliase the big DEM:
     lats = np.arange(south_i, north_i, 1)
@@ -193,13 +192,13 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
                     pass
                         
             # 2: if required, fill voids in the tile
-            if void_fill is True and np.min(tile_elev) == (-32768) and replaced_with_null is False:                             # if there is a void in the tile, and we've said that we want to fill voids, and it's not a tile we can't find and have filled with nulls
+            if void_fill and (np.min(tile_elev) == (-32768)) and (replaced_with_null is False) and mask_before_crop:                             # if there is a void in the tile, and we've said that we want to fill voids, and it's not a tile we can't find and have filled with nulls
                 print(f"{tile_name} : Filling voids in the tile... ", end = "")
                 tile_elev = fill_gridata_voids(tile_elev)                
                 print(' Done!')
     
             # 3: Make the water mask for that tile
-            if  water_mask_resolution is not None and mask_before_crop:                                                     # if we're masking water, and doing it before cropping.  
+            if  (water_mask_resolution != None) and (mask_before_crop):                                                     # if we're masking water, and doing it before cropping.  
                 if replaced_with_null:                                                                                      # if it was replaced by null, should be water so don't need to make a mask
                     print(f"{tile_name} : Assuming water tile and masking it all...", end = '')    
                     tile_mask = np.ones((pixs2deg,pixs2deg))                                                                 # make a mask in which all pixels are masked (as it's assumed to be a water tile)
@@ -226,18 +225,21 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
             dem = ma.array(dem, mask = water_mask)                                                                            # possbily conver the DEM from an array to a masked array.
         dem = dem[dem.shape[0]-ur_pixels[0][1] : dem.shape[0]-ll_pixels[0][1] , ll_pixels[0][0] : ur_pixels[0][0] ]           # crop the DEM, which may be a masked array (see above), or it may just be an array
                                                                                                                               # Nb matrix notation starts from the top left, so y has conversions from xy coordinate of pixel (which is from lower left)
-
-    else:        
-        if  water_mask_resolution is not None:                                                                                    # check that a water mask is required
+    else:                                                                                                                           # if mask before crop is false, we still need to mask and void fill
+        if  water_mask_resolution is not None:                                                                                    # 1: the water masking (determine if needed)
             print("Masking the water bodies in the entire DEM (as its area was determined to be below 1 tile)... ", end = '')
             dem = dem[dem.shape[0]-ur_pixels[0][1] : dem.shape[0]-ll_pixels[0][1] , ll_pixels[0][0] : ur_pixels[0][0] ]           # crop the DEM, which is still an array.  
             dem_mask = water_pixel_masker(dem, (west, south), (east, north), water_mask_resolution, 
                                                        pixs_per_deg = pixs2deg, verbose = False)                                  # make the water mask for the entire DEM.         
             dem = ma.array(dem, mask = dem_mask)                                                                                  # convert the DEM from an array to a masked array.
             print("Done!")
-        else:
-            pass
         
+        if void_fill and (np.min(ma.compressed(dem)) == (-32768)):                                                                  # 2: The void fill (determine if needed)
+            print("Filling voids in the entire DEM (as its area was determined to be below 1 tile)... ", end = '')
+            dem_filled = fill_gridata_voids(ma.getdata(dem))                                                                        # getdata turns the ma back to a numpy array
+            dem = ma.array(dem_filled, mask = dem_mask)                                                                             # conver the void filled numpy array we just made back to the masked array.  
+            print("Done!")
+
     # 6: make long and lats for each pixel in the DEM
     lons_mg, lats_mg = np.meshgrid(np.linspace(west, east-(1/pixs2deg), dem.shape[1]), np.linspace(south, north-(1/pixs2deg), dem.shape[0]))        # lons and lats are for the lower left corner of eahc pixel, so we stop (east and north)
                                                                                                                                                     # the size of 1 pixel before the edge of the DEM
@@ -261,8 +263,10 @@ def SRTM_dem_make_batch(list_dems,  SRTM1_or3 = 'SRTM3', water_mask_resolution =
         2020/09/23 | MEG | Written
     """
     import numpy as np
+    import copy
     
     n_dems = len(list_dems)                                                                                             # get the total number of DEMs to make
+    list_dems_with_dem = copy.deepcopy(list_dems)
     
     for n_dem, list_dem in enumerate(list_dems):                                                                                      # loop through each DEM to make it.  
         print(f"Starting DEM {n_dem} of {n_dems}.  ")       
@@ -276,18 +280,21 @@ def SRTM_dem_make_batch(list_dems,  SRTM1_or3 = 'SRTM3', water_mask_resolution =
                 dem_loc_size['east'] = list_dem['east']
                 dem_loc_size['south'] = list_dem['south']
                 dem_loc_size['north'] = list_dem['north']
+            
+            #import pdb; pdb.set_trace()
                 
             dem, lons, lats =  SRTM_dem_make(dem_loc_size,
                                              SRTM1_or3, water_mask_resolution, SRTM1_tiles_folder, SRTM3_tiles_folder, 
                                              ed_username, ed_password, download, void_fill)                                         # make the DEM, using either of the two ways the DEM can be described.  
-            list_dem['dem'] = dem                                                                                       # and write the products to the dictionary.  
-            list_dem['lons_mg'] = lons                                                                                     # cont'd
-            list_dem['lats_mg'] = lats                                                                                     # cont'd
-                
+            
+            list_dems_with_dem[n_dem]['dem'] = dem                                                                                       # and write the products to the dictionary.  
+            list_dems_with_dem[n_dem]['lons_mg'] = lons                                                                                     # cont'd
+            list_dems_with_dem[n_dem]['lats_mg'] = lats                                                                                     # cont'd
+                    
         except:
             print(f'Failed to create DEM {n_dem} but continuing to the next DEM.  ')                                                                                    # print warning message if the try statement fails.  
                 
-    return list_dems
+    return list_dems_with_dem
 
   
     
