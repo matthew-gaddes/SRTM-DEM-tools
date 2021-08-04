@@ -45,12 +45,14 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
         2020/09/30 | MEG | Change format so that DEMs can be specified as either a centre and side length, or as before as bounds (west, east, south, north)
         2020/10/01 | MEG | Fix a bug in the lats_mg that was causing the lowest lats to be on the top row.  
     """
-    #import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
     import numpy as np
     import numpy.ma as ma
     import geopy
     from geopy.distance import geodesic
     #import os 
+    plt.switch_backend('agg')                                                                       # with this backend, no windows are created during figure creation.                 
+    
     
     def determine_masking_stratergy(west, east, south, north, area_threshold = 1.0):
         """ Determine the area of a DEM (in number of 1'x1' squares) and return if this is bigger than 
@@ -205,7 +207,7 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
                 else:
                     print(f"{tile_name} : Creating a mask of water areas...", end = '')    
                     tile_mask = water_pixel_masker(tile_elev, (lon, lat), (lon+1, lat+1), water_mask_resolution, 
-                                                   pixs_per_deg = pixs2deg, verbose = False)                                 # or make a water mask for that tile
+                                                   pixs_per_deg = pixs2deg, verbose = False)                                 # or make a water mask for that tile, note that bounds are just set to be for that tile.  
                 print(" Done!")
             else:
                 pass
@@ -244,6 +246,8 @@ def SRTM_dem_make(dem_loc_size, SRTM1_or3 = 'SRTM3', water_mask_resolution = Non
     lons_mg, lats_mg = np.meshgrid(np.linspace(west, east-(1/pixs2deg), dem.shape[1]), np.linspace(south, north-(1/pixs2deg), dem.shape[0]))        # lons and lats are for the lower left corner of eahc pixel, so we stop (east and north)
                                                                                                                                                     # the size of 1 pixel before the edge of the DEM
     lats_mg = np.flipud(lats_mg)                                                                                                                    # flip so that lowest lats are at bottom of array                                            
+    plt.switch_backend('Qt5Agg')                                                                                                            # return to the standard interactive backend 
+    
     return dem, lons_mg, lats_mg
   
 #%%
@@ -394,14 +398,15 @@ def fill_gridata_voids(tile, void_value = -32768):
     Returns:
         tile_filled  rank 2 array | gridded data, now without voids.  
     History:
-        2020/08/13 | MEG | Modified from script.  
+        2020/08/13 | MEG | Modified from script. 
+        2021/08/04 | MEG | Fix bug in grid_x and grid_y (x and y dimensions were transposed, which only caused an error when interpolating parts of a tile that weren't equal in size in the x and y dimension)
     """
     import numpy as np
     from scipy.interpolate import griddata             # for interpolating over any voids
-
-    grid_x, grid_y = np.mgrid[0:tile.shape[1]:1, 0:tile.shape[0]:1 ]
-    valid_points = np.argwhere(tile != void_value)                                                         # void are filled with -32768 perhaps?  less than -1000 should catch these
-    tile_at_valid_points = tile[valid_points[:,0], valid_points[:,1]]
+    
+    grid_x, grid_y = np.mgrid[0:tile.shape[0]:1, 0:tile.shape[1]:1 ]                                    # make a grid of the x and y coords for each point (units are number of pixels, note that it takes n_rows then n_cols (ie y before x)
+    valid_points = np.argwhere(tile != void_value)                                                         # void are filled with -32768 (for srtm).  The length of this vector (n_pixels x 2) should be less than the number of pixels in tile, if some are voids.  If no voids, equal.  
+    tile_at_valid_points = tile[valid_points[:,0], valid_points[:,1]]                                       # tile values at each of the valid locations.  
     tile_filled = griddata(valid_points, tile_at_valid_points, (grid_x, grid_y), method='linear')
     return tile_filled
      
@@ -559,7 +564,7 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     
     if verbose:
         print('Creating a mask of pixels that lie in water (sea and lakes)... ', end = '')
-    
+       
     # 0: check inputs
     if lon_lat_ll[0] > lon_lat_ur[0]:
         raise Exception(f"The western (left) edge ({lon_lat_ll[0]}) appears to be east of the "
@@ -575,7 +580,7 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, verbose = False
     x = np.linspace(lon_lat_ll[0], lon_lat_ur[0], nx)
     y = np.linspace(lon_lat_ll[1], lon_lat_ur[1], ny)
     xx, yy = np.meshgrid(x,y)
-    locations = np.hstack((np.ravel(xx)[:,np.newaxis], np.ravel(yy)[:,np.newaxis]))
+    locations = np.hstack((np.ravel(xx)[:,np.newaxis], np.ravel(yy)[:,np.newaxis]))                             # x and y (lon and lat) for all pixels in the dem, size (n_pixels x 2)
      
     # 2 Make the basemap figure
     ll_extent = [lon_lat_ll[0]-edge_fraction, lon_lat_ur[0]+edge_fraction, 
