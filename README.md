@@ -1,5 +1,7 @@
 # SRTM-DEM-tools
-Tools for making and manipulating SRTM1 and SRTM3 DEMs.  
+Tools for making and manipulating SRTM1 and SRTM3 DEMs.  Note that only a small amount of the GSHHS data is included here to give a working example.  The full dataset can be downloaded from http://www.soest.hawaii.edu/pwessel/gshhg/
+
+
 
 
 # Installation
