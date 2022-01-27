@@ -67,7 +67,7 @@ print("\n\n\n###############################\nExample4\n########################
     
 dem, lons, lats =  SRTM_dem_make({'west':-5.1, 'east':-4.4, 'south':55.5, 'north':56.1},
                                   SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = Path('./SRTM3/'),
-                                  water_mask_resolution = 'f', void_fill = False, gshhs_dir = gshhs_dir,                                   # make the dem
+                                  water_mask_resolution = 'h', void_fill = False, gshhs_dir = gshhs_dir,                                   # make the dem
                                   ed_username = ed_username, ed_password = ed_password)
 
 dem_show(dem, lons, lats, title = '4: SRTM3 DEM')                                              # plot the DEM
@@ -79,7 +79,7 @@ print("\n\n\n###############################\nExample5\n########################
 
 dem, lons, lats =  SRTM_dem_make({'west':120.7, 'east':121.2, 'south':13.8, 'north':14.1},
                                   SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = Path('./SRTM3/'),
-                                  water_mask_resolution = 'f', void_fill = False, gshhs_dir = gshhs_dir,                                   # make the dem
+                                  water_mask_resolution = 'h', void_fill = False, gshhs_dir = gshhs_dir,                                   # make the dem
                                   ed_username = ed_username, ed_password = ed_password)
 
 dem_show(dem, lons, lats, title = '5: Taal (a good test for water body masking)')                                              # plot the DEM
@@ -91,7 +91,7 @@ print("\n\n\n###############################\nExample6\n########################
 
 dem, lons, lats =  SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(110e3, 100e3)},
                                   SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = Path('./SRTM3/'),
-                                  water_mask_resolution = 'f', void_fill = False,  gshhs_dir = gshhs_dir,                                  # make the dem
+                                  water_mask_resolution = 'h', void_fill = False,  gshhs_dir = gshhs_dir,                                  # make the dem
                                   ed_username = ed_username, ed_password = ed_password)
 
 dem_show(dem, lons, lats, title = '5: SRTM3 DEM, centre and side_length style')                                              # plot the DEM
@@ -105,7 +105,7 @@ volcano_dems = [{'name' : 'Vulsini',       'centre' : (11.93, 42.6),    'side_le
                 {'name' : 'Campi Flegrei', 'centre' : (14.139, 40.827), 'side_length' : (30e3,20e3)},
                 {'name' : 'Etna', 'west' : 14.75, 'east' : 15.5, 'south'  : 37.4, 'north' : 38.0}]
 
-volcano_dems2 = SRTM_dem_make_batch(volcano_dems, water_mask_resolution = 'f', ed_username = ed_username, ed_password = ed_password,        # make the DEMS
+volcano_dems2 = SRTM_dem_make_batch(volcano_dems, water_mask_resolution = 'h', ed_username = ed_username, ed_password = ed_password,        # make the DEMS
                                     gshhs_dir = gshhs_dir)
 
 for volc_n, volcano in enumerate(volcano_dems2):                                                                                   # loop through to display them
