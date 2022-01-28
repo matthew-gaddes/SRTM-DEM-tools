@@ -22,28 +22,37 @@ from srtm_dem_tools.aux import truncate_colormap, open_crop_gebco_data
 
 
 
-#%% Things to set
+#%% Things to set (default of SRTM1 can be changed in "Make a DEM")
 
 
-crop_area = {'west'  : 14.0,
+crop_area = {'west'  : 14.0,                                    # in degrees
              'east'  : 14.75,
              "south" : 40.60,
              "north" : 41.10}
 
-ed_username = input(f'Please enter your USGS Earthdata username:  ')
-ed_password = input(f'Please enter your USGS Earthdata password (NB characters will be visible!   ):  ')
+water_mask_resolution = 'f'                             # Same naming as GSHSS (shoreline) data:
+                                                        #      f     full resolution: Original (full) data resolution.
+                                                        #      h     high resolution: About 80 % reduction in size and quality.
+                                                        #      i     intermediate resolution: Another ~80 % reduction.
+                                                        #      l     low resolution: Another ~80 % reduction.
+                                                        #      c     crude resolution: Another ~80 % reduction.
+                                                        
+figsize=(7.84, 6)                                      #, 7.84 standard width for JGR:SE figsize in inches
 
 gshhs_dir = Path("./GSHHG_coastlines_2.3.7/GSHHS_shp/")
 gebco_file = Path("/home/matthew/university_work/data/GEBCO_bathymetry/gebco_2021/GEBCO_2021_sub_ice_topo.nc")
 
 
-figsize=(7.84, 6)                                      #, 7.84 standard width for JGR:SE figsize in inches
 
+#%% Get login details.  Not necessary (e.g. just enter 'a' and 'b') to run the example as the tiles are provided here.  
+
+ed_username = input(f'Please enter your USGS Earthdata username:  ')
+ed_password = input(f'Please enter your USGS Earthdata password (NB characters will be visible!   ):  ')
 
 #%% Make a DEM (SRTM 1)
 
 dem, lons, lats =  SRTM_dem_make(crop_area, SRTM1_or3 = 'SRTM1', SRTM1_tiles_folder = Path('./SRTM1/'), gshhs_dir = gshhs_dir,
-                                  water_mask_resolution = 'f', ed_username = ed_username, ed_password = ed_password)
+                                  water_mask_resolution = water_mask_resolution, ed_username = ed_username, ed_password = ed_password)
 
 
 #dem_show(dem,lons,lats, title = '2: SRTM1 DEM')                                                                   # plot the DEM
@@ -68,7 +77,7 @@ bath_data_ma = ma.array(bath_data, mask = np.invert(bath_water_mask))
 
 #%% load vector shoreline data
 
-_, intersect_coastline_polygons, intersect_cropped_coastline_polygons = load_GSHHS_coastlines(gshhs_dir, resolution = 'f', bbox = crop_area, level = '1')
+_, intersect_coastline_polygons, intersect_cropped_coastline_polygons = load_GSHHS_coastlines(gshhs_dir, resolution = water_mask_resolution, bbox = crop_area, level = '1')
 
 #%% Make the figure
 
