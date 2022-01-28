@@ -9,8 +9,12 @@ import numpy as np
 import numpy.ma as ma                                                                 # used for DEMS and water masks 
 from pathlib import Path
 import sys
+
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import LightSource
+from matplotlib import ticker
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes            
 import cartopy
 import cartopy.crs as ccrs
 
@@ -29,6 +33,11 @@ crop_area = {'west'  : 14.0,                                    # in degrees
              'east'  : 14.75,
              "south" : 40.60,
              "north" : 41.10}
+
+cbar_position = {'x' : 14.01,                           # longitude of bottom left of  cbar
+                 'y' : 40.95,                           # latitude of bottom left of cbar
+                 'width' : 0.01,                       # width, in degrees
+                 'height' : 0.1}                         # height, in degrees
 
 water_mask_resolution = 'f'                             # Same naming as GSHSS (shoreline) data:
                                                         #      f     full resolution: Original (full) data resolution.
@@ -106,9 +115,19 @@ ax.imshow(dem_rgba, extent=(np.min(lons), np.max(lons), np.min(lats), np.max(lat
 for intersect_coastline_polygon in intersect_coastline_polygons:
     ax.plot(intersect_coastline_polygon[:,0], intersect_coastline_polygon[:,1], c = 'k', linewidth = 1.8)
 
-# labels/colorbars/grid lines etc.  
+# labels/grid lines etc.  
 gl = ax.gridlines(draw_labels=True, linestyle = '--', color = 'k', alpha = 0.5) #, dms=True, x_inline=False, y_inline=False)
 gl.bottom_labels = False
 gl.right_labels = False
 
+#colorbar
 
+ifg_cb_axes = ax.inset_axes([cbar_position['x'], cbar_position['y'],
+                             cbar_position['width'], cbar_position['height']], transform=ax.transData)      # [xpos, ypos, xwidth, ywidth], note the x_pos_scaler that reduces the size of the inset axes to make sure it remains in tehe right place
+
+norm = mpl.colors.Normalize(vmin = (1/1000)*np.min(dem), vmax = (1/1000)*np.max(dem))
+cb1 = mpl.colorbar.ColorbarBase(ifg_cb_axes, cmap = cmap_land, norm = norm,  orientation = 'vertical')
+tick_locator = ticker.MaxNLocator(nbins=4)
+cb1.locator = tick_locator
+cb1.update_ticks()
+cb1.set_label('Height (Km)', ha = 'center', fontsize = 8)
