@@ -1,0 +1,18 @@
+name: srtm_dem_tools_test
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3
+  - matplotlib
+  - numpy
+#  - spyder
+  - geopy
+  - shapely
+  - pyshp
+  - cartopy
+  - netcdf4
+  - pip
+  - pip:
+    - wget

@@ -69,8 +69,6 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, gshhs_dir, verb
     
     bbox = {"west" : lon_lat_ll[0] - edge_fraction, "east" : lon_lat_ur[0] + edge_fraction,
             "south": lon_lat_ll[1] - edge_fraction, "north" : lon_lat_ur[1] + edge_fraction}
-    if verbose:
-        print(f"Staring to open the GSHHS coastlines shapefiles (which can be slow)...", end = '')
 
     #plt.switch_backend('Qt5Agg')                                  # debugging, plot the coastlines     
     l1_mask = np.zeros(len(locations), dtype=bool)                                                                               # initialise as false, will be True (1) where land
@@ -80,12 +78,15 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, gshhs_dir, verb
     for product in ['L1','L2','L3','L4']:                                                   # the GSHHS products
         _, _, coastlines = load_GSHHS_coastlines(gshhs_dir, resolution = coast_resol, bbox = bbox, level = product[-1])            # open the GSHHS product (list of numpy arrays of lon lats of water/land boundary)
 
-
-        # f, ax = plt.subplots(1,1)                                                                 # debug plot
-        # for p in coastlines:
-        #     ax.plot(p[:,0], p[:,1])
+        if debug_mode:
+            title = f'{product} coastlines'
+            f1, ax = plt.subplots(1,1)                                                                 # debug plot
+            f1.suptitle(title)
+            f1.canvas.manager.set_window_title(title)
+            for p in coastlines:
+                ax.plot(p[:,0], p[:,1])
         
-        for coastline in coastlines:
+        for n, coastline in enumerate(coastlines):
             landmass = Path(coastline)  
             if product == 'L1':
                 l1_mask += np.array(landmass.contains_points(locations))                           # True if pixel is in land
@@ -95,6 +96,8 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, gshhs_dir, verb
                 l3_mask += np.array(landmass.contains_points(locations))                           # True if pixel is in island
             elif product == 'L4':
                 l4_mask += np.array(landmass.contains_points(locations))                           # True if pixel is in pond (on island)
+            if verbose:
+                print(f"Completed product {product} coastline {n}")
                                                                     
     
     l12_mask = np.logical_and(l1_mask, np.invert(l2_mask))                        # combine first two
@@ -103,19 +106,20 @@ def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, gshhs_dir, verb
     water_mask = np.invert(l14_mask)                                                  # water is where not land, so invert (now True for land)
     water_mask = np.flipud(np.reshape(water_mask, (ny, nx)))                                 # reshape, not sure why flipud as geographic but numpy is referring to top left pixel
     
+    if debug_mode:    
+        f, ax = plt.subplots(1,5)                                                     #debug plot
+        ax[0].imshow(np.flipud(np.reshape(l1_mask, (ny, nx))))
+        ax[1].imshow(np.flipud(np.reshape(l2_mask, (ny, nx))))
+        ax[2].imshow(np.flipud(np.reshape(l3_mask, (ny, nx))))
+        ax[3].imshow(np.flipud(np.reshape(l4_mask, (ny, nx))))
+        ax[4].imshow(water_mask)
         
-    # f, ax = plt.subplots(1,4)                                                     #debug plot
-    # ax[0].imshow(np.flipud(np.reshape(l1_mask, (ny, nx))))
-    # ax[1].imshow(np.flipud(np.reshape(l2_mask, (ny, nx))))
-    # ax[2].imshow(np.flipud(np.reshape(l3_mask, (ny, nx))))
-    # ax[3].imshow(np.flipud(np.reshape(l4_mask, (ny, nx))))
-    
-    # f, ax = plt.subplots(2)
-    # ax.imshow(np.flipud(np.reshape(l12_mask, (ny, nx))))
-    # f, ax = plt.subplots(1)
-    # ax.imshow(np.flipud(np.reshape(l13_mask, (ny, nx))))
-    # f, ax = plt.subplots(1)
-    # ax.imshow(np.flipud(np.reshape(l14_mask, (ny, nx))))
+        # f, ax = plt.subplots(2)
+        # ax.imshow(np.flipud(np.reshape(l12_mask, (ny, nx))))
+        # f, ax = plt.subplots(1)
+        # ax.imshow(np.flipud(np.reshape(l13_mask, (ny, nx))))
+        # f, ax = plt.subplots(1)
+        # ax.imshow(np.flipud(np.reshape(l14_mask, (ny, nx))))
     
     
 
