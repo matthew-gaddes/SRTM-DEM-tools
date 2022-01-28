@@ -3,8 +3,7 @@ Tools for making and manipulating SRTM1 and SRTM3 DEMs.  Note that only a small 
 
 # New in January 2022:
 Publication style figures can now be created with very few settings.  See "publication_example.py"
-![image](https://user-images.githubusercontent.com/10498635/151543682-7b063e31-9b1b-44cb-b191-2b17460a13c2.png)
-
+![image](https://user-images.githubusercontent.com/10498635/151544314-f3ad224f-0336-45cc-a9f0-659cf4b277bd.png)
 
 
 
