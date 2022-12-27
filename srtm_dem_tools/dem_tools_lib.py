@@ -441,7 +441,7 @@ def open_hgt_file(tile_name, pixels_y, pixels_x, tile_folder = './SRTM1/', verbo
     #import ipdb; ipdb.set_trace()
     if verbose:
         print(f"{tile_name}: Opening the hgt file...", end = '')
-    elevations = np.fromfile(tile_folder / f"{tile_name}.hgt", np.dtype('>i2'))                    # get as a rank 1 array
+    elevations = np.fromfile(f"{tile_folder}/{tile_name}.hgt", np.dtype('>i2'))                    # get as a rank 1 array
     tile_array = elevations.reshape((pixels_y, pixels_x))                                        # convert to rank 2
     if verbose:
         print('Done!')
