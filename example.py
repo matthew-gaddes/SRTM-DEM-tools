@@ -23,13 +23,13 @@ ed_password = input(f'Please enter your USGS Earthdata password (NB characters w
 #%% Make and show a SRTM3 DEM
 
 print("\n\n\n###############################\nExample1\n###############################")
+                                                                                                                         # quick overview of arguments.  See function doc string for more details  
+dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},                                        # these are the DEM bounds, in degrees.  
+                                  SRTM1_or3 = 'SRTM3', SRTM3_tiles_folder = Path('./SRTM3/'),                           # set the resolution (1 or 3), and then the directory where tiles are stored.  
+                                  water_mask_resolution = 'i', void_fill = False, gshhs_dir = gshhs_dir,               # water mask resolution, can be c l i h f, fill voids, directory to store water body data.  
+                                  ed_username = ed_username, ed_password = ed_password)                                 # needed to download new tiles.  
 
-dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
-                                  SRTM1_or3 = 'SRTM3', SRTM1_tiles_folder = Path('./SRTM3/'),
-                                  water_mask_resolution = 'i', void_fill = False, gshhs_dir = gshhs_dir,                                    # make the dem
-                                  ed_username = ed_username, ed_password = ed_password)
-
-dem_show(dem,lons,lats,title = '1: SRTM3 DEM')                                              # plot the DEM
+dem_show(dem,lons,lats,title = '1: SRTM3 DEM')                                                                          # plot the DEM
 
 
 

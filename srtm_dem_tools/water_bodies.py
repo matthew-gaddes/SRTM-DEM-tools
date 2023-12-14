@@ -6,6 +6,7 @@ Created on Thu Jan 27 09:55:56 2022
 @author: matthew
 """
 
+import pdb
 
 
 def water_pixel_masker(dem, lon_lat_ll, lon_lat_ur, coast_resol, gshhs_dir, verbose = False, pixs_per_deg = 1201,
@@ -215,9 +216,9 @@ def load_GSHHS_coastlines(gshhs_dir, resolution = 'i', bbox = None, level = '1')
                 intersect_coastline_polygons.append(np.array(one_landmass))                         # convert it to a numpy array and store
                 
                 intersect_shapely_polygon = one_landmass_polygon.intersection(bbox)                 # find which bits are in the bbox, this can be a Polygon or a MultiPolygon (if the coastline has now broken into two parts (e.g. a horshoe shaped island could become two islands if the bbox only capture the bottom part of it))
-                if intersect_shapely_polygon.type == 'Polygon':
+                if intersect_shapely_polygon.geom_type == 'Polygon':
                     intersect_cropped_coastline_polygons.append(polygon_to_nparray(intersect_shapely_polygon))       # conver the Polygon to a numpy array and store
-                elif intersect_shapely_polygon.type == 'MultiPolygon':
+                elif intersect_shapely_polygon.geom_type == 'MultiPolygon':
                     # f, ax = plt.subplots()                                                    # useful to debug and visualise why it's a MultiPolygon
                     # for p in intersect_shapely_polygon:
                     #     p_as_nparray = polygon_to_nparray(p)

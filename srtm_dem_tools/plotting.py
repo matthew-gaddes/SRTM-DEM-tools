@@ -67,7 +67,7 @@ def dem_show(matrix, lons_mg, lats_mg, title = None):
     f, ax = plt.subplots()                                                                      # initatite figure.  
     if title is not None:
         f.suptitle(title)                                                                       # possibly add a title
-        f.canvas.set_window_title(title)
+        f.canvas.manager.set_window_title(title)
     plot_data = ax.imshow(matrix,interpolation='none', aspect=1, vmin = 0, vmax=np.max(matrix), cmap=new_cmap)
     f.colorbar(plot_data)                                                                        # add a colour bar.  
         

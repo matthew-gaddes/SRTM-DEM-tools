@@ -131,3 +131,5 @@ tick_locator = ticker.MaxNLocator(nbins=4)
 cb1.locator = tick_locator
 cb1.update_ticks()
 cb1.set_label('Height (Km)', ha = 'center', fontsize = 8)
+
+fig.savefig('publication_example.png', bbox_inches = 'tight')
