@@ -8,13 +8,15 @@ Created on Thu Jan 27 09:55:05 2022
 
 #%%
 
-def dem_show(matrix, lons_mg, lats_mg, title = None):
+def dem_show(matrix, lons_mg, lats_mg, title = None, outdir = None):
     """Visualise a DEM using lat lon as the axis
     Inputs:
         matrix | rank2 array | dem data to be plotted
         lons_mg | rank 2 array | The lons of each pixel in the DEM.  Product of np.meshgrid
         lats_mg | rank 2 array | The lats of each pixel in the DEM.  Products of np.meshgrid.  
         title | None or string | The figure title.  
+        outdir |pathlib path | out direcotry to save to.  title and .png is appended to this (where title is the title supplied).  
+                                If no title is supplied, a default title is applied
     Returns:
         Figure
     History:
@@ -23,6 +25,7 @@ def dem_show(matrix, lons_mg, lats_mg, title = None):
         2020/06/04 | MEG | Add title option
         2020/09/22 | MEG | Change lons and lats from list of integers to meshgrids
         2020/10/01 | MEG | Fix a bug in how lats on the tick labels were handled.  
+        2023/12/14 | MEG | Add ability to save figure as png. 
     """
     
     import matplotlib.pyplot as plt
@@ -78,4 +81,12 @@ def dem_show(matrix, lons_mg, lats_mg, title = None):
     old_ticks = ax.get_yticks()                                                                 # update the y ticks, now suits version ? of matplotlib
     ax.yaxis.set_major_locator(mticker.FixedLocator(old_ticks))
     ax.set_yticklabels(create_tick_labels_in_deg(old_ticks, lats_mg[-1,:]))
+    
+    if outdir is not None:
+        if title is None:
+            title = f"no_title_supplied"
+        else:
+            title = title.replace(' ', '_')                                 # make sure no spaces
+        f.savefig(outdir / f"{title}.png")
+        
 

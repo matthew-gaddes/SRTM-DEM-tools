@@ -17,6 +17,8 @@ from pathlib import Path
 
 gshhs_dir = Path("./GSHHG_coastlines_2.3.7/GSHHS_shp/")
 
+fig_outdir = Path("./figures")
+
 ed_username = input(f'Please enter your USGS Earthdata username:  ')
 ed_password = input(f'Please enter your USGS Earthdata password (NB characters will be visible!   ):  ')
 
@@ -29,7 +31,7 @@ dem, lons, lats =  SRTM_dem_make({'west':-4, 'east':-1, 'south':53, 'north':55},
                                   water_mask_resolution = 'i', void_fill = False, gshhs_dir = gshhs_dir,               # water mask resolution, can be c l i h f, fill voids, directory to store water body data.  
                                   ed_username = ed_username, ed_password = ed_password)                                 # needed to download new tiles.  
 
-dem_show(dem,lons,lats,title = '1: SRTM3 DEM')                                                                          # plot the DEM
+dem_show(dem,lons,lats,title = '1: SRTM3 DEM', outdir = fig_outdir)                                                                          # plot the DEM
 
 
 
@@ -42,7 +44,7 @@ dem, lons, lats =  SRTM_dem_make({'west':-3, 'east':-1, 'south':53, 'north':55},
                                   water_mask_resolution = 'i', ed_username = ed_username, ed_password = ed_password)
 
 
-dem_show(dem,lons,lats, title = '2: SRTM1 DEM')                                                                   # plot the DEM
+dem_show(dem,lons,lats, title = '2: SRTM1 DEM', outdir = fig_outdir)                                                                   # plot the DEM
 
 
 #%% Or make a DEM, and mask the water in a separate step.   
@@ -57,7 +59,7 @@ dem2, lons2, lats2 =  SRTM_dem_make({'west':11, 'east':13, 'south':41, 'north':4
 
 standalone_mask =  water_pixel_masker(dem2, (lons2[0,0], lats2[-1,0]), (lons2[-1,-1], lats2[0, -1]), 'h', gshhs_dir, verbose = True)               # make the water mask
 
-dem_show(ma.array(dem2, mask = standalone_mask), lons2, lats2, title = '3: SRTM3 DEM - standalone mask')                                # plot the DEM
+dem_show(ma.array(dem2, mask = standalone_mask), lons2, lats2, title = '3: SRTM3 DEM - standalone mask', outdir = fig_outdir)                                # plot the DEM
 
 
 
@@ -70,10 +72,10 @@ dem, lons, lats =  SRTM_dem_make({'west':-5.1, 'east':-4.4, 'south':55.5, 'north
                                   water_mask_resolution = 'h', void_fill = False, gshhs_dir = gshhs_dir,                                   # make the dem
                                   ed_username = ed_username, ed_password = ed_password)
 
-dem_show(dem, lons, lats, title = '4: SRTM3 DEM')                                              # plot the DEM
+dem_show(dem, lons, lats, title = '4: SRTM3 DEM', outdir = fig_outdir)                                              # plot the DEM
 
 
-#%% Taal Volcano is also an intersting example as there's land a lake, in which there's an island, in which there's a lake, in which there's an island
+#%% Taal Volcano is also an intersting example as there's a lake, in which there's an island, in which there's a lake, in which there's an island
 
 print("\n\n\n###############################\nExample5\n###############################")
 
@@ -82,7 +84,7 @@ dem, lons, lats =  SRTM_dem_make({'west':120.7, 'east':121.2, 'south':13.8, 'nor
                                   water_mask_resolution = 'h', void_fill = False, gshhs_dir = gshhs_dir,                                   # make the dem
                                   ed_username = ed_username, ed_password = ed_password)
 
-dem_show(dem, lons, lats, title = '5: Taal (a good test for water body masking)')                                              # plot the DEM
+dem_show(dem, lons, lats, title = '5: Taal, challenging water masking', outdir = fig_outdir)                                              # plot the DEM
 
 
 #%% Instead of using the edges of the DEM (west, east etc.), a centre and side length (in m) can be supplied.  
@@ -94,7 +96,7 @@ dem, lons, lats =  SRTM_dem_make({'centre': (-3.396, 37.041), 'side_length':(110
                                   water_mask_resolution = 'h', void_fill = False,  gshhs_dir = gshhs_dir,                                  # make the dem
                                   ed_username = ed_username, ed_password = ed_password)
 
-dem_show(dem, lons, lats, title = '5: SRTM3 DEM, centre and side_length style')                                              # plot the DEM
+dem_show(dem, lons, lats, title = '6: SRTM3 DEM, centre and side_length style', outdir = fig_outdir)                                              # plot the DEM
 
 
 #%% DEMs can also be made in batches by creating a list of dictionaries.  
@@ -109,5 +111,5 @@ volcano_dems2 = SRTM_dem_make_batch(volcano_dems, water_mask_resolution = 'h', e
                                     gshhs_dir = gshhs_dir)
 
 for volc_n, volcano in enumerate(volcano_dems2):                                                                                   # loop through to display them
-    dem_show(volcano['dem'], volcano['lons_mg'], volcano['lats_mg'], title = f"{volc_n+5}: DEM # {volc_n}: {volcano['name']}")
+    dem_show(volcano['dem'], volcano['lons_mg'], volcano['lats_mg'], title = f"{volc_n+7}: DEM # {volc_n}: {volcano['name']}", outdir = fig_outdir)
 
