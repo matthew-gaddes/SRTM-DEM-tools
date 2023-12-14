@@ -1,12 +1,15 @@
 # SRTM-DEM-tools
 Tools for making and manipulating SRTM1 and SRTM3 DEMs.  Note that only a small amount of the GSHHS data is included here to give a working example.  The full dataset can be downloaded from http://www.soest.hawaii.edu/pwessel/gshhg/
 
+# New in January 2022:
+Publication style figures can now be created with very few settings.  See "publication_example.py"
+![image](https://user-images.githubusercontent.com/10498635/151544314-f3ad224f-0336-45cc-a9f0-659cf4b277bd.png)
 
 
 
 # Installation
-A suitable python environment can be created using the conda command:<br>
-<code>conda env create --file SRTM-DEM-Tools.yml</code>
+A suitable python environment can be created using the conda command (for version 3.X.X):<br>
+<code>conda env create --file srtm_dem_tools_v3.yml</code>
 
 <br>
 
